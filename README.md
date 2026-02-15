@@ -107,6 +107,33 @@ spai antipatterns unwrap-in-production src/    # Run one
 
 The tool walks up the directory tree to find `.spai.edn`, so it works from any subdirectory.
 
+## Claude Code Hook
+
+If you use [Claude Code](https://claude.ai/code), spai includes an optional hook that catches grep-based code exploration and suggests the spai equivalent. Knowing is not doing — this intervenes at the moment of the mistake.
+
+**Install with spai:**
+```bash
+# During install (interactive prompt)
+curl -sSL ... | bash
+
+# Or explicitly
+install.sh --claude-hooks
+```
+
+**Install manually:**
+```bash
+cp hooks/claude-code-reminder.sh ~/.claude/hooks/spai-reminder.sh
+chmod +x ~/.claude/hooks/spai-reminder.sh
+# Then add to ~/.claude/settings.json — see hooks/claude-code-reminder.sh for format
+```
+
+**What it catches:**
+- `grep -rn "PlanContext" src/` — suggests `spai usages PlanContext src/`
+- `grep "pub fn" src/` — suggests `spai shape src/` or `spai sig src/`
+- `grep "impl " --include="*.rs"` — suggests `spai def` or `spai shape`
+
+**What it doesn't catch:** Single, targeted greps that aren't code exploration. The hook only fires on patterns that suggest multi-step exploration.
+
 ## Why
 
 LLM agents waste tokens on three things:
