@@ -220,6 +220,85 @@
                  (when-let [m (re-find #"from\s+['\"]([^'\"]+)['\"]" (:text h))]
                    {:module (second m) :line (:line h) :kind :import}))))))
 
+(defn- extract-python-imports
+  "Extract imports from a Python file with proper from/import handling."
+  [file-path]
+  (let [hits (or (grepf "^\\s*(import|from)\\s+" file-path) [])]
+    (->> hits
+         (keep (fn [h]
+                 (let [text (:text h)]
+                   (cond
+                     ;; from .foo import bar  OR  from . import foo
+                     (re-find #"^from\s+(\.\S*)\s+import" text)
+                     (let [[_ rel-mod] (re-find #"^from\s+(\.\S*)\s+import\s+(.+)" text)
+                           items (when rel-mod
+                                   (second (re-find #"^from\s+\.\S*\s+import\s+(.+)" text)))]
+                       (when rel-mod
+                         {:module rel-mod :line (:line h) :kind :from
+                          :items (when items
+                                   (mapv str/trim (str/split (str/replace items #"\(|\)" "") #",")))}))
+
+                     ;; from foo.bar import baz
+                     (re-find #"^from\s+" text)
+                     (when-let [[_ mod-name] (re-find #"^from\s+(\S+)\s+import" text)]
+                       {:module mod-name :line (:line h) :kind :from})
+
+                     ;; import foo.bar, import foo
+                     (re-find #"^import\s+" text)
+                     (when-let [[_ mod-name] (re-find #"^import\s+(\S+)" text)]
+                       {:module (str/replace mod-name #",$" "")
+                        :line (:line h) :kind :import}))))))))
+
+(defn- find-python-root
+  "Find the Python project root. Walks up looking for pyproject.toml, setup.py, etc."
+  [start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (or (.exists (io/file dir "pyproject.toml"))
+              (.exists (io/file dir "setup.py"))
+              (.exists (io/file dir "setup.cfg")))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defn- resolve-python-module
+  "Try to resolve a Python module to a project file.
+   Handles both absolute (foo.bar) and relative (.foo) imports."
+  [mod-str current-file project-root]
+  (let [cur-dir  (.getParent (io/file current-file))
+        try-file (fn [base as-path]
+                   (when base
+                     (or (let [f (io/file (str base "/" as-path ".py"))]
+                           (when (.exists f) (.getCanonicalPath f)))
+                         (let [f (io/file (str base "/" as-path "/__init__.py"))]
+                           (when (.exists f) (.getCanonicalPath f))))))]
+    (cond
+      ;; Relative: .foo → current dir, ..foo → parent, etc.
+      (str/starts-with? mod-str ".")
+      (let [dots   (count (re-find #"^\.+" mod-str))
+            rest   (subs mod-str dots)
+            ;; Walk up one less than dot count (. = current, .. = parent)
+            base   (loop [d (io/file cur-dir) n (dec dots)]
+                     (if (or (<= n 0) (nil? d)) d
+                       (recur (.getParentFile d) (dec n))))
+            as-path (str/replace rest "." "/")]
+        (when base
+          (if (seq as-path)
+            (try-file (.getPath base) as-path)
+            ;; from . import foo → look for __init__.py in current package
+            (let [f (io/file (.getPath base) "__init__.py")]
+              (when (.exists f) (.getCanonicalPath f))))))
+
+      ;; Absolute: try from project root, then common src/ layouts
+      :else
+      (let [as-path (str/replace mod-str "." "/")
+            roots   (if project-root
+                      [project-root
+                       (str project-root "/src")
+                       (str project-root "/lib")]
+                      [cur-dir])]
+        (some #(try-file % as-path) roots)))))
+
 (defn- extract-generic-imports
   "Extract imports using the generic import-patterns config."
   [file-path lang]
@@ -283,7 +362,7 @@
                         (= mod-str "self"))
                   :local :external)
     :typescript (if (str/starts-with? mod-str ".") :local :external)
-    :python     (if (str/starts-with? mod-str ".") :local :unknown)
+    :python     (if (str/starts-with? mod-str ".") :local :probe)
     :clojure    :unknown
     :go         :unknown
     :unknown))
@@ -309,9 +388,14 @@
             ;; For Rust: find crate root for resolving crate:: paths
             src-root (when (= lang :rust)
                        (find-src-root (or (first files) path)))
+            ;; For Python: find project root for resolving absolute imports
+            py-root  (when (= lang :python)
+                       (find-python-root (or (first files) path)))
             ;; Use git root or crate root for relativizing paths
+            target-dir (if (.isFile f) (.getParent f) (.getCanonicalPath f))
             git-root (try (str/trim (:out @(p/process ["git" "rev-parse" "--show-toplevel"]
-                                                       {:out :string :err :string})))
+                                                       {:out :string :err :string
+                                                        :dir target-dir})))
                           (catch Exception _ nil))
             rel      (fn [p]
                        (when p
@@ -326,6 +410,7 @@
                          (let [raw-imports (case lang
                                             :rust       (extract-rust-imports file-path)
                                             :typescript (extract-ts-imports file-path)
+                                            :python     (extract-python-imports file-path)
                                             (extract-generic-imports file-path lang))
                                ;; Collect mod names so bare imports can match them
                                mod-names  (when (= lang :rust)
@@ -358,14 +443,19 @@
                                                                         (resolve-rust-module resolve-mod src-root file-path))
                                                                 :typescript (when (= cls :local)
                                                                               (resolve-ts-module module file-path))
-                                                                nil)]
-                                                 (cond-> (assoc imp :scope cls)
+                                                                :python (resolve-python-module module file-path py-root)
+                                                                nil)
+                                                     ;; For Python :probe — resolution determines local vs external
+                                                     final-cls (if (= cls :probe)
+                                                                 (if resolved :local :external)
+                                                                 cls)]
+                                                 (cond-> (assoc imp :scope final-cls)
                                                    resolved (assoc :resolved (rel resolved)))))
                                              (vec raw-imports))]
                            {:file     (or (rel file-path) file-path)
                             :imports  imports
                             :local    (count (filter #(= :local (:scope %)) imports))
-                            :external (vec (distinct (map :module (filter #(= :external (:scope %)) imports))))}))
+                            :external (vec (distinct (map :module (filter #(#{:external :unknown} (:scope %)) imports))))}))
                        files)]
         (if (.isFile f)
           ;; Single file view

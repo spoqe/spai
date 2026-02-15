@@ -52,7 +52,7 @@
              :returns  "reverse dependencies: who imports/uses this file?"
              :example  "spai who spoqe-exec/src/step_executor.rs spoqe-exec/src/"}
    :deps    {:args     "[file|path]"
-             :returns  "import graph with file resolution (Rust, TypeScript), extraction only for others"
+             :returns  "import graph with file resolution (Rust, TypeScript, Python)"
              :example  "spai deps spoqe-exec/src/federation/mod.rs"}
    :context {:args     "[symbol] [path]"
              :returns  "usages with enclosing function name"
