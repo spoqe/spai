@@ -37,67 +37,67 @@
 (def commands
   {:shape   {:args     "[path] [--full]"
              :returns  "functions, types, impls grouped by file"
-             :example  "./spai shape src/federation/"}
+             :example  "spai shape src/federation/"}
    :usages  {:args     "[symbol] [path]"
              :returns  "file, line, text for each match"
-             :example  "./spai usages process_query src/"}
+             :example  "spai usages process_query src/"}
    :def     {:args     "[symbol] [path]"
              :returns  "definition site(s) only, not usages"
-             :example  "./spai def MyService my-crate/src/"}
+             :example  "spai def MyService my-crate/src/"}
    :sig     {:args     "[path]"
              :returns  "function signatures (the API surface)"
-             :example  "./spai sig src/service/mod.rs"}
+             :example  "spai sig src/service/mod.rs"}
    :who     {:args     "[file] [path]"
              :returns  "reverse dependencies: who imports/uses this file?"
-             :example  "./spai who my-crate/src/processor.rs my-crate/src/"}
+             :example  "spai who my-crate/src/processor.rs my-crate/src/"}
    :context {:args     "[symbol] [path]"
              :returns  "usages with enclosing function name"
-             :example  "./spai context process_query my-crate/src/"}
+             :example  "spai context process_query my-crate/src/"}
    :overview {:args    "[path]"
               :returns "language, config files, dirs, file counts by extension"
-              :example "./spai overview ."}
+              :example "spai overview ."}
    :layout   {:args    "[path]"
               :returns "directory tree (depth 4), skips noise dirs"
-              :example "./spai layout spoqe-core/src/"}
+              :example "spai layout spoqe-core/src/"}
    :tests    {:args    "[target] [path]"
               :returns "test files related to a source file or symbol"
-              :example "./spai tests processor my-crate/src/"}
+              :example "spai tests processor my-crate/src/"}
    :hotspots {:args    "[path]"
               :returns "top 20 largest source files (where's the debt?)"
-              :example "./spai hotspots my-crate/src/"}
+              :example "spai hotspots my-crate/src/"}
    :todos    {:args    "[path]"
               :returns "TODO/FIXME/HACK scan with structured output"
-              :example "./spai todos my-crate/src/"}
+              :example "spai todos my-crate/src/"}
    :related  {:args    "[file] [--n N] [--min-pct N]"
               :returns "co-change analysis: files that change alongside this one"
-              :example "./spai related my-crate/src/processor.rs"}
+              :example "spai related my-crate/src/processor.rs"}
    :diff     {:args    "[file] [n]"
               :returns "actual diff content for recent changes to a file"
-              :example "./spai diff my-crate/src/processor.rs 3"}
+              :example "spai diff my-crate/src/processor.rs 3"}
    :narrative {:args   "[file] [--n N]"
                :returns "biography of a file: creation, growth, splits, stabilization"
-               :example "./spai narrative my-crate/src/service/mod.rs"}
+               :example "spai narrative my-crate/src/service/mod.rs"}
    :drift     {:args    "[path] [--n N] [--min-pct N]"
                :returns "implicit vs explicit architecture: hidden and dead coupling"
-               :example "./spai drift my-crate/src/"}
+               :example "spai drift my-crate/src/"}
    :blast    {:args    "[symbol] [path]"
               :returns "blast radius: definition, callers, importers, tests, authors, risk"
-              :example "./spai blast process_request my-crate/src/"}
+              :example "spai blast process_request my-crate/src/"}
    :patterns  {:args    "[path]"
                :returns "discover naming and structural conventions in the codebase"
-               :example "./spai patterns my-crate/src/"}
+               :example "spai patterns my-crate/src/"}
    :changes      {:args    "[path] [n]"
                   :returns "recent commits with files touched"
-                  :example "./spai changes src/ 3"}
+                  :example "spai changes src/ 3"}
    :antipatterns {:args    "[name] [path]"
                   :returns "scan for project-defined antipatterns from .spai.edn"
-                  :example "./spai antipatterns uri-prefix-detection spoqe-core/src/"}
+                  :example "spai antipatterns uri-prefix-detection spoqe-core/src/"}
    :stats    {:args    ""
               :returns "usage counts, top paths, recent calls"
-              :example "./spai stats"}
+              :example "spai stats"}
    :reflect  {:args    ""
               :returns "usage patterns with observations"
-              :example "./spai reflect"}})
+              :example "spai reflect"}})
 
 (let [[command & args] *command-line-args*]
   (case command
