@@ -11,6 +11,7 @@
 
 (require '[clojure.java.io :as io]
          '[clojure.string :as str]
+         '[clojure.edn :as edn]
          '[clojure.pprint :as pp]
          '[babashka.process :as p])
 
@@ -97,7 +98,10 @@
               :example "spai stats"}
    :reflect  {:args    ""
               :returns "usage patterns with observations"
-              :example "spai reflect"}})
+              :example "spai reflect"}
+   :plugins  {:args    ""
+              :returns "discovered plugins with DOAP metadata (if present)"
+              :example "spai plugins"}})
 
 (let [[command & args] *command-line-args*]
   (case command
@@ -174,6 +178,39 @@
                      (pp/pprint (antipatterns name path)))
     "stats"    (pp/pprint (stats))
     "reflect"  (pp/pprint (reflect))
+    "plugins"  (let [path-dirs  (str/split (or (System/getenv "PATH") "") #":")
+                       is-plugin? (fn [^java.io.File f]
+                                    (and (str/starts-with? (.getName f) "spai-")
+                                         (.canExecute f)
+                                         (.isFile f)))
+                       plugin-files (->> path-dirs
+                                         (map io/file)
+                                         (filter #(.isDirectory %))
+                                         (mapcat #(.listFiles %))
+                                         (filter is-plugin?)
+                                         ;; Dedupe by name (first on PATH wins)
+                                         (reduce (fn [acc f]
+                                                   (let [n (.getName f)]
+                                                     (if (contains? (set (map #(.getName ^java.io.File %) acc)) n)
+                                                       acc
+                                                       (conj acc f))))
+                                                 []))
+                       read-meta (fn [^java.io.File f]
+                                   (try
+                                     (let [form (-> (slurp f)
+                                                    (str/replace #"^#!.*\n" "")
+                                                    edn/read-string)]
+                                       (when (map? form) form))
+                                     (catch Exception _ nil)))
+                       results (mapv (fn [^java.io.File f]
+                                       (let [n (str/replace (.getName f) #"^spai-" "")
+                                             m (read-meta f)]
+                                         (merge {:spai/name n
+                                                 :spai/path (.getAbsolutePath f)}
+                                                (or m {}))))
+                                     plugin-files)]
+                   (log-usage! "plugins" args {})
+                   (pp/pprint results))
     "setup"    (load-file (str spai-dir "/setup.clj"))
     "link"     (let [source (or (first args) ".")
                      source-abs (.getCanonicalPath (io/file source))
