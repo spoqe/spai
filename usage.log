@@ -1,0 +1,73 @@
+{:ts "2026-02-14T19:30:28.627858Z", :command "usages", :args ["FederatedExecutor" "spoqe-exec/src/"], :result {:symbol "FederatedExecutor", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:30:28.730375Z", :command "shape", :args ["spoqe-core/src/edna/"], :result {:path "spoqe-core/src/edna/", :full false}}
+{:ts "2026-02-14T19:30:28.817961Z", :command "changes", :args ["spoqe-exec/" "2"], :result {:path "spoqe-exec/"}}
+{:ts "2026-02-14T19:36:31.074640Z", :command "def", :args ["FederatedExecutor" "spoqe-exec/src/"], :result {:symbol "FederatedExecutor", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:36:36.145300Z", :command "sig", :args ["spoqe-exec/src/federation/sql_sparql.rs"], :result {:path "spoqe-exec/src/federation/sql_sparql.rs"}}
+{:ts "2026-02-14T19:36:42.527732Z", :command "def", :args ["execute_sparql_only" "spoqe-exec/src/"], :result {:symbol "execute_sparql_only", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:40:52.155651Z", :command "overview", :args ["."], :result {:path "."}}
+{:ts "2026-02-14T19:41:05.359244Z", :command "layout", :args ["spoqe-core/src/edna/"], :result {:path "spoqe-core/src/edna/"}}
+{:ts "2026-02-14T19:41:05.483745Z", :command "hotspots", :args ["spoqe-exec/src/"], :result {:path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:41:05.580634Z", :command "tests", :args ["step_executor" "spoqe-exec/src/"], :result {:target "step_executor", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:41:27.899737Z", :command "tests", :args ["step_executor" "spoqe-exec/src/"], :result {:target "step_executor", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:41:31.677497Z", :command "usages", :args ["step_executor" "spoqe-exec/"], :result {:symbol "step_executor", :path "spoqe-exec/"}}
+{:ts "2026-02-14T19:41:36.716860Z", :command "tests", :args ["step_executor" "."], :result {:target "step_executor", :path "."}}
+{:ts "2026-02-14T19:42:21.127351Z", :command "tests", :args ["step_executor" "spoqe-exec/src/"], :result {:target "step_executor", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:43:38.844584Z", :command "tests", :args ["step_executor" "spoqe-exec/src/"], :result {:target "step_executor", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:58:48.271014Z", :command "hotspots", :args ["spoqe-exec/src/"], :result {:path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:58:48.974859Z", :command "hotspots", :args ["spoqe-core/src/"], :result {:path "spoqe-core/src/"}}
+{:ts "2026-02-14T19:58:49.658996Z", :command "hotspots", :args ["spoqe-cli/src/"], :result {:path "spoqe-cli/src/"}}
+{:ts "2026-02-14T19:58:50.401948Z", :command "hotspots", :args ["spoqe-expand/src/"], :result {:path "spoqe-expand/src/"}}
+{:ts "2026-02-14T19:58:59.410116Z", :command "shape", :args ["spoqe-exec/src/step_executor.rs"], :result {:path "spoqe-exec/src/step_executor.rs", :full false}}
+{:ts "2026-02-14T19:58:59.881908Z", :command "hotspots", :args ["spoqe-ui/src/"], :result {:path "spoqe-ui/src/"}}
+{:ts "2026-02-14T19:59:00.034478Z", :command "shape", :args ["spoqe-core/src/edna/plan.rs"], :result {:path "spoqe-core/src/edna/plan.rs", :full false}}
+{:ts "2026-02-14T19:59:00.265366Z", :command "usages", :args ["useState" "spoqe-ui/src/"], :result {:symbol "useState", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T19:59:00.434674Z", :command "usages", :args ["useEffect" "spoqe-ui/src/"], :result {:symbol "useEffect", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T19:59:00.676065Z", :command "shape", :args ["spoqe-cli/src/server/handlers.rs"], :result {:path "spoqe-cli/src/server/handlers.rs", :full false}}
+{:ts "2026-02-14T19:59:00.970975Z", :command "usages", :args ["any" "spoqe-ui/src/"], :result {:symbol "any", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T19:59:01.446823Z", :command "shape", :args ["spoqe-expand/src/expand.rs"], :result {:path "spoqe-expand/src/expand.rs", :full false}}
+{:ts "2026-02-14T19:59:11.135951Z", :command "usages", :args ["edn_to_query" "spoqe-exec/src/"], :result {:symbol "edn_to_query", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:59:11.208046Z", :command "usages", :args ["Strategy::Executor" "."], :result {:symbol "Strategy::Executor", :path "."}}
+{:ts "2026-02-14T19:59:12.364828Z", :command "usages", :args ["dangerouslySetInnerHTML" "spoqe-ui/src/"], :result {:symbol "dangerouslySetInnerHTML", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T19:59:13.012919Z", :command "usages", :args ["as any" "spoqe-ui/src/"], :result {:symbol "as any", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T19:59:13.631106Z", :command "usages", :args ["eslint-disable" "spoqe-ui/src/"], :result {:symbol "eslint-disable", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T19:59:14.240140Z", :command "shape", :args ["spoqe-ui/src/lib/api/"], :result {:path "spoqe-ui/src/lib/api/", :full false}}
+{:ts "2026-02-14T19:59:17.443860Z", :command "usages", :args ["unwrap" "spoqe-exec/src/"], :result {:symbol "unwrap", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:59:18.548518Z", :command "usages", :args ["unwrap" "spoqe-core/src/"], :result {:symbol "unwrap", :path "spoqe-core/src/"}}
+{:ts "2026-02-14T19:59:19.427066Z", :command "usages", :args ["unwrap" "spoqe-cli/src/"], :result {:symbol "unwrap", :path "spoqe-cli/src/"}}
+{:ts "2026-02-14T19:59:20.420021Z", :command "usages", :args ["unwrap" "spoqe-expand/src/"], :result {:symbol "unwrap", :path "spoqe-expand/src/"}}
+{:ts "2026-02-14T19:59:21.566818Z", :command "usages", :args ["ast::Query" "spoqe-exec/src/"], :result {:symbol "ast::Query", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T19:59:22.311685Z", :command "usages", :args ["to_query" "spoqe-core/src/"], :result {:symbol "to_query", :path "spoqe-core/src/"}}
+{:ts "2026-02-14T20:00:05.849451Z", :command "shape", :args ["spoqe-exec/src/notion.rs"], :result {:path "spoqe-exec/src/notion.rs", :full false}}
+{:ts "2026-02-14T20:00:06.406832Z", :command "shape", :args ["spoqe-exec/src/cache.rs"], :result {:path "spoqe-exec/src/cache.rs", :full false}}
+{:ts "2026-02-14T20:00:07.162319Z", :command "shape", :args ["spoqe-core/src/ast.rs"], :result {:path "spoqe-core/src/ast.rs", :full false}}
+{:ts "2026-02-14T20:00:07.828096Z", :command "shape", :args ["spoqe-core/src/sources.rs"], :result {:path "spoqe-core/src/sources.rs", :full false}}
+{:ts "2026-02-14T20:00:08.696321Z", :command "shape", :args ["spoqe-core/src/meta.rs"], :result {:path "spoqe-core/src/meta.rs", :full false}}
+{:ts "2026-02-14T20:00:09.413856Z", :command "shape", :args ["spoqe-cli/src/main.rs"], :result {:path "spoqe-cli/src/main.rs", :full false}}
+{:ts "2026-02-14T20:00:13.048505Z", :command "shape", :args ["spoqe-ui/src/components/ColumnExplorer.tsx"], :result {:path "spoqe-ui/src/components/ColumnExplorer.tsx", :full false}}
+{:ts "2026-02-14T20:00:13.697240Z", :command "shape", :args ["spoqe-ui/src/components/SkosExplorer.tsx"], :result {:path "spoqe-ui/src/components/SkosExplorer.tsx", :full false}}
+{:ts "2026-02-14T20:00:14.181301Z", :command "shape", :args ["spoqe-exec/src/federation/mod.rs"], :result {:path "spoqe-exec/src/federation/mod.rs", :full false}}
+{:ts "2026-02-14T20:00:14.292325Z", :command "shape", :args ["spoqe-ui/src/components/EditorTab.tsx"], :result {:path "spoqe-ui/src/components/EditorTab.tsx", :full false}}
+{:ts "2026-02-14T20:00:14.713795Z", :command "shape", :args ["spoqe-ui/src/components/ResultsPanel.tsx"], :result {:path "spoqe-ui/src/components/ResultsPanel.tsx", :full false}}
+{:ts "2026-02-14T20:00:14.937185Z", :command "shape", :args ["spoqe-exec/src/federation/legacy_execution.rs"], :result {:path "spoqe-exec/src/federation/legacy_execution.rs", :full false}}
+{:ts "2026-02-14T20:00:15.628287Z", :command "shape", :args ["spoqe-exec/src/federation/source_expr.rs"], :result {:path "spoqe-exec/src/federation/source_expr.rs", :full false}}
+{:ts "2026-02-14T20:00:16.584116Z", :command "usages", :args ["execute_source_expr" "spoqe-exec/src/"], :result {:symbol "execute_source_expr", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T20:00:20.797418Z", :command "usages", :args ["execute_source_expr_edn" "spoqe-exec/src/"], :result {:symbol "execute_source_expr_edn", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T20:00:21.834258Z", :command "shape", :args ["spoqe-core/src/edna/to_query.rs"], :result {:path "spoqe-core/src/edna/to_query.rs", :full false}}
+{:ts "2026-02-14T20:00:22.733988Z", :command "shape", :args ["spoqe-core/src/sql_compiler.rs"], :result {:path "spoqe-core/src/sql_compiler.rs", :full false}}
+{:ts "2026-02-14T20:00:42.335312Z", :command "shape", :args ["spoqe-exec/src/sys_executor.rs"], :result {:path "spoqe-exec/src/sys_executor.rs", :full false}}
+{:ts "2026-02-14T20:00:42.904539Z", :command "shape", :args ["spoqe-exec/src/http_executor.rs"], :result {:path "spoqe-exec/src/http_executor.rs", :full false}}
+{:ts "2026-02-14T20:00:43.847388Z", :command "usages", :args ["to_query" "spoqe-exec/src/"], :result {:symbol "to_query", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T20:00:44.441112Z", :command "shape", :args ["spoqe-exec/src/federation/expansion.rs"], :result {:path "spoqe-exec/src/federation/expansion.rs", :full false}}
+{:ts "2026-02-14T20:01:01.284629Z", :command "shape", :args ["spoqe-ui/src/App.tsx"], :result {:path "spoqe-ui/src/App.tsx", :full false}}
+{:ts "2026-02-14T20:01:14.089357Z", :command "usages", :args ["savedQueries" "spoqe-ui/src/"], :result {:symbol "savedQueries", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T20:01:14.580642Z", :command "usages", :args ["lib/api'" "spoqe-ui/src/"], :result {:symbol "lib/api'", :path "spoqe-ui/src/"}}
+{:ts "2026-02-14T21:46:04.343303Z", :command "antipatterns", :args ["uri-prefix-detection" "spoqe-core/src/"], :result {:name "uri-prefix-detection", :path "spoqe-core/src/"}}
+{:ts "2026-02-14T21:46:30.657374Z", :command "antipatterns", :args ["uri-prefix-detection" "spoqe-core/src/"], :result {:name "uri-prefix-detection", :path "spoqe-core/src/"}}
+{:ts "2026-02-14T21:46:52.987425Z", :command "antipatterns", :args ["uri-prefix-detection" "spoqe-core/src/"], :result {:name "uri-prefix-detection", :path "spoqe-core/src/"}}
+{:ts "2026-02-14T21:46:57.711598Z", :command "antipatterns", :args [], :result {:name nil, :path nil}}
+{:ts "2026-02-14T21:49:14.515785Z", :command "antipatterns", :args ["" "spoqe-core/src/edna/"], :result {:name "", :path "spoqe-core/src/edna/"}}
+{:ts "2026-02-14T21:49:37.702259Z", :command "antipatterns", :args ["spoqe-core/src/edna/"], :result {:name nil, :path "spoqe-core/src/edna/"}}
+{:ts "2026-02-14T21:49:42.751848Z", :command "antipatterns", :args ["strategy-executor" "spoqe-exec/src/"], :result {:name "strategy-executor", :path "spoqe-exec/src/"}}
+{:ts "2026-02-14T22:10:46.453384Z", :command "antipatterns", :args ["uri-prefix-detection" "spoqe-core/src/"], :result {:name "uri-prefix-detection", :path "spoqe-core/src/"}}
+{:ts "2026-02-14T22:11:33.877166Z", :command "overview", :args ["."], :result {:path "."}}
+{:ts "2026-02-14T22:21:43.344612Z", :command "antipatterns", :args ["uri-prefix-detection" "spoqe-core/src/"], :result {:name "uri-prefix-detection", :path "spoqe-core/src/"}}
