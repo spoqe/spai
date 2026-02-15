@@ -175,6 +175,47 @@
     "stats"    (pp/pprint (stats))
     "reflect"  (pp/pprint (reflect))
     "setup"    (load-file (str spai-dir "/setup.clj"))
+    "link"     (let [source (or (first args) ".")
+                     source-abs (.getCanonicalPath (io/file source))
+                     share-dir (str (or (System/getenv "XDG_DATA_HOME")
+                                        (str (System/getProperty "user.home") "/.local/share"))
+                                    "/spai")]
+                 (when-not (.exists (io/file source-abs "spai.clj"))
+                   (println (str "Error: " source-abs " doesn't look like a spai source dir (no spai.clj)"))
+                   (System/exit 1))
+                 (when (= source-abs share-dir)
+                   (println "Already running from install dir. Nothing to link.")
+                   (System/exit 0))
+                 ;; Remove existing install (real dir or stale symlink)
+                 (let [f (io/file share-dir)]
+                   (when (.exists f)
+                     (if (java.nio.file.Files/isSymbolicLink (.toPath f))
+                       (java.nio.file.Files/delete (.toPath f))
+                       ;; Real dir — move aside
+                       (let [backup (io/file (str share-dir ".bak"))]
+                         (.renameTo f backup)
+                         (println (str "  Backed up install to " (.getPath backup)))))))
+                 (java.nio.file.Files/createSymbolicLink
+                   (.toPath (io/file share-dir))
+                   (.toPath (io/file source-abs))
+                   (into-array java.nio.file.attribute.FileAttribute []))
+                 (println (str "Linked: " share-dir " → " source-abs))
+                 (println "  Edits to source are live. Run `spai unlink` to restore."))
+    "unlink"   (let [share-dir (str (or (System/getenv "XDG_DATA_HOME")
+                                         (str (System/getProperty "user.home") "/.local/share"))
+                                     "/spai")
+                     share-path (.toPath (io/file share-dir))]
+                 (if (java.nio.file.Files/isSymbolicLink share-path)
+                   (let [target (str (java.nio.file.Files/readSymbolicLink share-path))]
+                     (java.nio.file.Files/delete share-path)
+                     (println (str "Unlinked: " share-dir " (was → " target ")"))
+                     ;; Restore backup if it exists
+                     (let [backup (io/file (str share-dir ".bak"))]
+                       (if (.exists backup)
+                         (do (.renameTo backup (io/file share-dir))
+                             (println "  Restored previous install from backup."))
+                         (println "  Run `bash install.sh` to reinstall from GitHub."))))
+                   (println "Not linked (not a symlink). Nothing to do.")))
     ("help" "--help" "-h") (do (pp/pprint commands)
                                (println)
                                (println "Extend spai:")
