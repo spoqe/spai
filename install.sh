@@ -4,13 +4,14 @@
 # curl -sSL https://raw.githubusercontent.com/semantic-partners/spai/main/install.sh | bash
 #
 # What it does:
-#   1. Downloads spai.clj and spai-edit.clj to ~/.local/share/spai/
+#   1. Downloads spai to ~/.local/share/spai/
 #   2. Creates spai and spai-edit wrappers in ~/.local/bin/
 #   3. Checks for dependencies (bb, rg)
+#   4. Optionally installs Claude Code reminder hook (--claude-hooks)
 
 set -euo pipefail
 
-REPO="semantic-partners/spai"
+REPO="SP-Lucky-Goose/spai"
 BRANCH="main"
 SHARE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/spai"
 BIN_DIR="${HOME}/.local/bin"
@@ -47,6 +48,8 @@ if command -v git &>/dev/null; then
   cd ..
   cp "${SHARE_DIR}.tmp"/*.clj "$SHARE_DIR/" 2>/dev/null || true
   cp "${SHARE_DIR}.tmp"/*.md "$SHARE_DIR/" 2>/dev/null || true
+  cp -r "${SHARE_DIR}.tmp"/src "$SHARE_DIR/" 2>/dev/null || true
+  cp -r "${SHARE_DIR}.tmp"/hooks "$SHARE_DIR/" 2>/dev/null || true
   rm -rf "${SHARE_DIR}.tmp"
 elif command -v curl &>/dev/null; then
   curl -sSL "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" | \
@@ -97,6 +100,87 @@ if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo "  Add to your shell config:"
   echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
   echo ""
+fi
+
+# -------------------------------------------------------------------
+# Claude Code hook (optional)
+# -------------------------------------------------------------------
+# Detects ~/.claude → offers to install a Bash tool hook that reminds
+# Claude agents to use spai instead of chaining grep.
+
+CLAUDE_DIR="$HOME/.claude"
+HOOK_SRC="$SHARE_DIR/hooks/claude-code-reminder.sh"
+HOOK_DST="$CLAUDE_DIR/hooks/spai-reminder.sh"
+SETTINGS="$CLAUDE_DIR/settings.json"
+
+install_claude_hook() {
+  mkdir -p "$CLAUDE_DIR/hooks"
+  cp "$HOOK_SRC" "$HOOK_DST"
+  chmod +x "$HOOK_DST"
+
+  # Wire into settings.json
+  if [ -f "$SETTINGS" ]; then
+    # Check if hooks already configured
+    if grep -q "spai-reminder" "$SETTINGS" 2>/dev/null; then
+      info "Claude Code hook already configured"
+      return
+    fi
+    # Append hooks to existing settings (simple: backup + python/jq)
+    if command -v python3 &>/dev/null; then
+      python3 -c "
+import json, sys
+with open('$SETTINGS') as f:
+    s = json.load(f)
+s.setdefault('hooks', {}).setdefault('Bash', {})['command'] = '$HOOK_DST'
+with open('$SETTINGS', 'w') as f:
+    json.dump(s, f, indent=2)
+" 2>/dev/null && info "Claude Code hook configured in settings.json" && return
+    fi
+    warn "Could not update settings.json automatically."
+    echo "  Add manually to $SETTINGS:"
+    echo '  "hooks": { "Bash": { "command": "'$HOOK_DST'" } }'
+  else
+    # Create minimal settings
+    mkdir -p "$CLAUDE_DIR"
+    cat > "$SETTINGS" << EOJSON
+{
+  "hooks": {
+    "Bash": {
+      "command": "$HOOK_DST"
+    }
+  }
+}
+EOJSON
+    info "Created $SETTINGS with hook"
+  fi
+  info "Claude Code hook installed"
+}
+
+if [ -d "$CLAUDE_DIR" ]; then
+  # Claude Code detected — check for --claude-hooks flag or ask
+  if [[ " $* " == *" --claude-hooks "* ]]; then
+    install_claude_hook
+  elif [ -t 0 ] && [ -t 1 ]; then
+    # Interactive terminal — ask
+    echo ""
+    info "Claude Code detected!"
+    echo "  spai includes a hook that reminds Claude agents to use spai"
+    echo "  instead of chaining grep commands for code exploration."
+    echo ""
+    read -p "  Install Claude Code hook? [y/N] " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      install_claude_hook
+    else
+      echo "  Skipped. Run again with --claude-hooks to install later."
+    fi
+  else
+    # Non-interactive (piped install) — mention it
+    echo ""
+    info "Claude Code detected. To install the spai reminder hook:"
+    echo "  Re-run with: install.sh --claude-hooks"
+    echo "  Or manually: cp $HOOK_SRC $HOOK_DST"
+  fi
 fi
 
 # Done
