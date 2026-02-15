@@ -52,7 +52,7 @@
              :returns  "reverse dependencies: who imports/uses this file?"
              :example  "spai who my-crate/src/processor.rs my-crate/src/"}
    :deps    {:args     "[file|path]"
-             :returns  "import graph with file resolution (Rust, TypeScript), extraction only for others"
+             :returns  "import graph with file resolution (Rust, TypeScript, Python)"
              :example  "spai deps my-crate/src/service/mod.rs"}
    :context {:args     "[symbol] [path]"
              :returns  "usages with enclosing function name"
