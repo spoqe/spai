@@ -37,67 +37,67 @@
 (def commands
   {:shape   {:args     "[path] [--full]"
              :returns  "functions, types, impls grouped by file"
-             :example  "./spai shape src/federation/"}
+             :example  "spai shape src/federation/"}
    :usages  {:args     "[symbol] [path]"
              :returns  "file, line, text for each match"
-             :example  "./spai usages execute_sparql src/"}
+             :example  "spai usages execute_sparql src/"}
    :def     {:args     "[symbol] [path]"
              :returns  "definition site(s) only, not usages"
-             :example  "./spai def FederatedExecutor spoqe-exec/src/"}
+             :example  "spai def FederatedExecutor spoqe-exec/src/"}
    :sig     {:args     "[path]"
              :returns  "function signatures (the API surface)"
-             :example  "./spai sig src/federation/mod.rs"}
+             :example  "spai sig src/federation/mod.rs"}
    :who     {:args     "[file] [path]"
              :returns  "reverse dependencies: who imports/uses this file?"
-             :example  "./spai who spoqe-exec/src/step_executor.rs spoqe-exec/src/"}
+             :example  "spai who spoqe-exec/src/step_executor.rs spoqe-exec/src/"}
    :context {:args     "[symbol] [path]"
              :returns  "usages with enclosing function name"
-             :example  "./spai context execute_sparql spoqe-exec/src/"}
+             :example  "spai context execute_sparql spoqe-exec/src/"}
    :overview {:args    "[path]"
               :returns "language, config files, dirs, file counts by extension"
-              :example "./spai overview ."}
+              :example "spai overview ."}
    :layout   {:args    "[path]"
               :returns "directory tree (depth 4), skips noise dirs"
-              :example "./spai layout spoqe-core/src/"}
+              :example "spai layout spoqe-core/src/"}
    :tests    {:args    "[target] [path]"
               :returns "test files related to a source file or symbol"
-              :example "./spai tests step_executor spoqe-exec/src/"}
+              :example "spai tests step_executor spoqe-exec/src/"}
    :hotspots {:args    "[path]"
               :returns "top 20 largest source files (where's the debt?)"
-              :example "./spai hotspots spoqe-exec/src/"}
+              :example "spai hotspots spoqe-exec/src/"}
    :todos    {:args    "[path]"
               :returns "TODO/FIXME/HACK scan with structured output"
-              :example "./spai todos spoqe-exec/src/"}
+              :example "spai todos spoqe-exec/src/"}
    :related  {:args    "[file] [--n N] [--min-pct N]"
               :returns "co-change analysis: files that change alongside this one"
-              :example "./spai related spoqe-exec/src/step_executor.rs"}
+              :example "spai related spoqe-exec/src/step_executor.rs"}
    :diff     {:args    "[file] [n]"
               :returns "actual diff content for recent changes to a file"
-              :example "./spai diff spoqe-exec/src/step_executor.rs 3"}
+              :example "spai diff spoqe-exec/src/step_executor.rs 3"}
    :narrative {:args   "[file] [--n N]"
                :returns "biography of a file: creation, growth, splits, stabilization"
-               :example "./spai narrative spoqe-exec/src/federation/mod.rs"}
+               :example "spai narrative spoqe-exec/src/federation/mod.rs"}
    :drift     {:args    "[path] [--n N] [--min-pct N]"
                :returns "implicit vs explicit architecture: hidden and dead coupling"
-               :example "./spai drift spoqe-exec/src/"}
+               :example "spai drift spoqe-exec/src/"}
    :blast    {:args    "[symbol] [path]"
               :returns "blast radius: definition, callers, importers, tests, authors, risk"
-              :example "./spai blast execute_source_expr_edn spoqe-exec/src/"}
+              :example "spai blast execute_source_expr_edn spoqe-exec/src/"}
    :patterns  {:args    "[path]"
                :returns "discover naming and structural conventions in the codebase"
-               :example "./spai patterns spoqe-exec/src/"}
+               :example "spai patterns spoqe-exec/src/"}
    :changes      {:args    "[path] [n]"
                   :returns "recent commits with files touched"
-                  :example "./spai changes src/ 3"}
+                  :example "spai changes src/ 3"}
    :antipatterns {:args    "[name] [path]"
                   :returns "scan for project-defined antipatterns from .spai.edn"
-                  :example "./spai antipatterns uri-prefix-detection spoqe-core/src/"}
+                  :example "spai antipatterns uri-prefix-detection spoqe-core/src/"}
    :stats    {:args    ""
               :returns "usage counts, top paths, recent calls"
-              :example "./spai stats"}
+              :example "spai stats"}
    :reflect  {:args    ""
               :returns "usage patterns with observations"
-              :example "./spai reflect"}})
+              :example "spai reflect"}})
 
 (let [[command & args] *command-line-args*]
   (case command
