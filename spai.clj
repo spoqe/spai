@@ -78,6 +78,9 @@
    :diff     {:args    "[file] [n]"
               :returns "actual diff content for recent changes to a file"
               :example "spai diff my-crate/src/processor.rs 3"}
+   :diff-shape {:args    "[path] [ref]"
+                :returns "structural diff: functions/types added, removed, signature changed"
+                :example "spai diff-shape my-crate/src/ HEAD~5"}
    :narrative {:args   "[file] [--n N]"
                :returns "biography of a file: creation, growth, splits, stabilization"
                :example "spai narrative my-crate/src/service/mod.rs"}
@@ -148,6 +151,8 @@
                                      :min-pct (or min-pct 10))))
     "diff"     (do (log-usage! "diff" args {:file (first args)})
                    (pp/pprint (diff (first args) (some-> (second args) parse-long))))
+    "diff-shape" (do (log-usage! "diff-shape" args {:path (first args) :ref (second args)})
+                     (pp/pprint (diff-shape (first args) (second args))))
     "narrative" (let [file (first args)
                       opts (rest args)
                       n    (when-let [i (.indexOf (vec opts) "--n")]
@@ -259,13 +264,9 @@
                          (println "  Run `bash install.sh` to reinstall from GitHub."))))
                    (println "Not linked (not a symlink). Nothing to do.")))
     ("help" "--help" "-h" nil)
-    (do (println (str "spai: code exploration for LLM agents. " (count commands) " commands.\n"))
-        (pp/pprint commands)
-        (println)
-        (println "Extend spai:")
-        (println "  Project plugins:  .spai/plugins/spai-<name>   (babashka, project-specific)")
-        (println "  Global plugins:   ~/.local/share/spai/plugins/spai-<name>")
-        (println "  PRs welcome:      https://github.com/semantic-partners/spai"))
+    (do (println (str "spai: code exploration for LLM agents. " (count commands) " commands."))
+        (println "Extend with plugins:  spai new-plugin <name> [project|user]\n")
+        (pp/pprint commands))
     ;; Extension: look for spai-<command> in PATH
     (let [ext-cmd (str "spai-" command)
           found   (try

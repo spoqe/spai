@@ -1,4 +1,4 @@
-;; spai/git — changes, related, diff, narrative, drift
+;; spai/git — changes, related, diff, diff-shape, narrative, drift
 ;; Git history analysis commands.
 
 (defn changes
@@ -101,6 +101,124 @@
                          (remove nil?))]
         {:file    file
          :commits commits}))))
+
+;; -------------------------------------------------------------------
+;; diff-shape — structural diff between git refs
+;; -------------------------------------------------------------------
+
+(defn- shape-from-string
+  "Extract function/type definitions from a content string.
+   Returns {:functions [{:name :text}] :types [{:name :kind :text}]}
+   Uses the same patterns as shape-raw but works on strings, not files."
+  [content lang]
+  (let [pats (get lang-patterns lang)]
+    (when pats
+      (let [lines (str/split-lines content)
+            match-lines (fn [pat-key extract-fn]
+                          (when-let [pat-str (get pats pat-key)]
+                            (let [pat (re-pattern pat-str)]
+                              (->> lines
+                                   (keep-indexed
+                                     (fn [idx line]
+                                       (when (re-find pat line)
+                                         (merge {:line (inc idx) :text (str/trim line)}
+                                                (extract-fn (str/trim line))))))
+                                   vec))))]
+        {:functions (or (match-lines :functions
+                          (fn [text] {:name (extract-fn-name text lang)}))
+                        [])
+         :types     (or (match-lines :types
+                          (fn [text] {:name (extract-type-name text)
+                                      :kind (extract-type-kind text)}))
+                        [])}))))
+
+(defn diff-shape
+  "Structural diff: which functions/types were added, removed, or changed signature.
+   Compares working tree against a git ref (default HEAD~1).
+   Single file or directory."
+  [path ref]
+  (let [ref  (or ref "HEAD~1")
+        path (or path ".")
+        ;; Compare working tree against ref
+        changed-raw (sh "git" "diff" "--name-only" ref "--" path)
+        changed-files (when changed-raw
+                        (->> (str/split-lines changed-raw)
+                             (remove str/blank?)
+                             (filter #(re-find source-exts %))
+                             vec))]
+    (if (empty? changed-files)
+      {:path path :ref ref :changes [] :summary "No structural changes"}
+      (let [file-diffs
+            (mapv
+              (fn [file]
+                (let [lang (detect-lang file)
+                      ;; Content at ref (nil if file didn't exist)
+                      old-content (sh "git" "show" (str ref ":" file))
+                      ;; Content on disk (nil if deleted)
+                      new-content (when (.exists (io/file file))
+                                    (slurp file))
+                      old-shape (when old-content (shape-from-string old-content lang))
+                      new-shape (when new-content (shape-from-string new-content lang))
+
+                      ;; --- Functions ---
+                      old-fns (set (keep :name (:functions old-shape)))
+                      new-fns (set (keep :name (:functions new-shape)))
+                      added-fns   (vec (sort (set/difference new-fns old-fns)))
+                      removed-fns (vec (sort (set/difference old-fns new-fns)))
+
+                      ;; Signature changes: same name, different text
+                      old-fn-sigs (into {} (keep (fn [{:keys [name text]}]
+                                                   (when name [name text]))
+                                                 (:functions old-shape)))
+                      new-fn-sigs (into {} (keep (fn [{:keys [name text]}]
+                                                   (when name [name text]))
+                                                 (:functions new-shape)))
+                      changed-fns (->> (set/intersection old-fns new-fns)
+                                       (keep (fn [n]
+                                               (let [old-sig (get old-fn-sigs n)
+                                                     new-sig (get new-fn-sigs n)]
+                                                 (when (not= old-sig new-sig)
+                                                   {:name n :old old-sig :new new-sig}))))
+                                       (sort-by :name)
+                                       vec)
+
+                      ;; --- Types ---
+                      old-types (set (keep :name (:types old-shape)))
+                      new-types (set (keep :name (:types new-shape)))
+                      added-types   (vec (sort (set/difference new-types old-types)))
+                      removed-types (vec (sort (set/difference old-types new-types)))
+
+                      has-changes? (or (seq added-fns) (seq removed-fns) (seq changed-fns)
+                                       (seq added-types) (seq removed-types))]
+                  (when has-changes?
+                    (cond-> {:file file}
+                      (seq added-fns)   (assoc :added-fns added-fns)
+                      (seq removed-fns) (assoc :removed-fns removed-fns)
+                      (seq changed-fns) (assoc :changed-fns changed-fns)
+                      (seq added-types)   (assoc :added-types added-types)
+                      (seq removed-types) (assoc :removed-types removed-types)
+                      ;; New file or deleted file marker
+                      (nil? old-content)  (assoc :status :new)
+                      (nil? new-content)  (assoc :status :deleted)))))
+              changed-files)
+
+            changes (vec (remove nil? file-diffs))
+
+            ;; Aggregate summary
+            total-added   (reduce + (map #(count (:added-fns % [])) changes))
+            total-removed (reduce + (map #(count (:removed-fns % [])) changes))
+            total-changed (reduce + (map #(count (:changed-fns % [])) changes))
+            total-types+  (reduce + (map #(count (:added-types % [])) changes))
+            total-types-  (reduce + (map #(count (:removed-types % [])) changes))]
+        {:path     path
+         :ref      ref
+         :files    (count changed-files)
+         :changes  changes
+         :summary  (str total-added " added, "
+                        total-removed " removed, "
+                        total-changed " signature changes"
+                        (when (pos? (+ total-types+ total-types-))
+                          (str ", " total-types+ " types added, " total-types- " types removed")))}))))
 
 ;; -------------------------------------------------------------------
 ;; narrative — biography of a file

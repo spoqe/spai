@@ -57,28 +57,167 @@
          :top-paths  (vec by-path)
          :recent     recent}))))
 
-(defn- observe
-  "Generate observations from usage data."
+;; -------------------------------------------------------------------
+;; Plugin discovery
+;; -------------------------------------------------------------------
+
+(defn- discover-plugins
+  "Find plugins on PATH (project + user). Returns seq of {:name :path :scope}."
+  []
+  (let [path-dirs (str/split (or (System/getenv "PATH") "") #":")
+        cwd       (System/getProperty "user.dir")
+        is-plugin? (fn [^java.io.File f]
+                     (and (str/starts-with? (.getName f) "spai-")
+                          (.canExecute f)
+                          (.isFile f)))]
+    (->> path-dirs
+         (map io/file)
+         (filter #(.isDirectory ^java.io.File %))
+         (mapcat #(.listFiles ^java.io.File %))
+         (filter is-plugin?)
+         (reduce (fn [acc ^java.io.File f]
+                   (let [n (.getName f)]
+                     (if (contains? (set (map :file-name acc)) n)
+                       acc
+                       (conj acc {:name      (str/replace n #"^spai-" "")
+                                  :path      (.getAbsolutePath f)
+                                  :file-name n
+                                  :scope     (if (str/includes? (.getAbsolutePath f) ".spai/plugins")
+                                               :project :user)}))))
+                 [])
+         (mapv #(dissoc % :file-name)))))
+
+;; -------------------------------------------------------------------
+;; Sequence detection
+;; -------------------------------------------------------------------
+
+(defn- extract-sessions
+  "Group log entries into sessions. A session break is a gap > 10 minutes."
   [entries]
-  (let [cmds         (map :command entries)
-        n            (count entries)
-        usage-count  (frequencies cmds)
-        unique-paths (->> entries (map #(first (:args %))) (remove nil?) distinct count)]
-    (vec (remove nil?
-      [(when (> (get usage-count "usages" 0) (* 2 (get usage-count "shape" 0)))
-         "You use 'usages' much more than 'shape'. Shape might need improvement.")
-       (when (< n 5)
-         "Too few data points. Keep using the tool and check back.")
-       (when (> n 20)
-         "Good usage data. Review :top-paths - are there modules you explore repeatedly?")
-       (when (and (> n 10) (< unique-paths 3))
-         (str "You've explored " unique-paths " unique paths across " n " calls. Narrow focus or missing breadth?"))]))))
+  (when (seq entries)
+    (let [gap-ms (* 10 60 1000)]
+      (reduce
+        (fn [sessions entry]
+          (let [ts (try (java.time.Instant/parse (:ts entry)) (catch Exception _ nil))]
+            (if (or (empty? sessions)
+                    (nil? ts)
+                    (let [last-ts (:last-ts (meta (peek sessions)))]
+                      (and last-ts
+                           (> (.toEpochMilli ^java.time.Instant ts)
+                              (+ (.toEpochMilli ^java.time.Instant last-ts) gap-ms)))))
+              ;; New session
+              (conj sessions (with-meta [entry] {:last-ts ts}))
+              ;; Same session
+              (let [curr (peek sessions)
+                    updated (conj curr entry)]
+                (conj (pop sessions) (with-meta updated {:last-ts ts}))))))
+        []
+        entries))))
+
+(defn- command-signature
+  "Abstract a log entry to its command shape (command + path-like first arg)."
+  [entry]
+  (let [cmd  (:command entry)
+        arg1 (first (:args entry))]
+    (if arg1
+      (str cmd " " (last (str/split (str arg1) #"/")))
+      cmd)))
+
+(defn- detect-sequences
+  "Find command sequences that repeat across sessions.
+   Returns seq of {:sequence [...] :count N :sessions N}."
+  [entries]
+  (let [sessions (extract-sessions entries)]
+    (when (> (count sessions) 1)
+      (let [;; Extract 2-4 length subsequences from each session
+            extract-ngrams (fn [session n]
+                             (when (>= (count session) n)
+                               (->> (partition n 1 session)
+                                    (mapv (fn [gram] (mapv command-signature gram))))))
+            ;; Collect all 2-3 grams across sessions
+            all-grams (for [session sessions
+                            n       [2 3]
+                            gram    (or (extract-ngrams session n) [])]
+                        {:gram gram :session-idx (.indexOf ^clojure.lang.PersistentVector (vec sessions) session)})
+            ;; Group by gram, count unique sessions
+            by-gram (->> all-grams
+                         (group-by :gram)
+                         (map (fn [[gram hits]]
+                                {:sequence gram
+                                 :count    (count hits)
+                                 :sessions (count (distinct (map :session-idx hits)))}))
+                         (filter #(>= (:sessions %) 2))
+                         (sort-by :count >)
+                         (take 5))]
+        (when (seq by-gram)
+          (vec by-gram))))))
+
+;; -------------------------------------------------------------------
+;; Project-aware path analysis
+;; -------------------------------------------------------------------
+
+(defn- project-paths
+  "Filter entries to current project directory, extract explored paths."
+  [entries]
+  (let [cwd (System/getProperty "user.dir")]
+    (->> entries
+         (filter (fn [e]
+                   (some (fn [arg]
+                           (and (string? arg)
+                                (or (str/starts-with? arg cwd)
+                                    (not (str/starts-with? arg "/")))))
+                         (:args e))))
+         (mapv (fn [e]
+                 {:command (:command e)
+                  :path    (first (:args e))
+                  :ts      (:ts e)})))))
+
+;; -------------------------------------------------------------------
+;; Reflect (rewritten)
+;; -------------------------------------------------------------------
 
 (defn reflect
-  "Review usage patterns. What's working? What's missing?"
+  "Session-start briefing. Plugins, patterns, exploration history."
   []
-  (let [entries (read-log)
-        s       (stats)]
-    (if (empty? entries)
-      s
-      (assoc s :observations (observe entries)))))
+  (let [entries    (read-log)
+        plugins    (discover-plugins)
+        proj-paths (when (seq entries) (project-paths entries))
+        sequences  (when (seq entries) (detect-sequences entries))
+        ;; Most-explored paths in this project
+        explored   (when (seq proj-paths)
+                     (->> proj-paths
+                          (map :path)
+                          frequencies
+                          (sort-by val >)
+                          (take 10)
+                          vec))
+        ;; What commands are used in this project
+        proj-cmds  (when (seq proj-paths)
+                     (->> proj-paths
+                          (map :command)
+                          frequencies
+                          (sort-by val >)
+                          vec))]
+    (cond-> {}
+      ;; Always show plugins first — most actionable
+      (seq plugins)
+      (assoc :plugins plugins)
+
+      (empty? plugins)
+      (assoc :plugins "None. Run: spai new-plugin <name> [project|user]")
+
+      ;; Repeated sequences — the "make a plugin" signal
+      (seq sequences)
+      (assoc :repeated-sequences sequences)
+
+      ;; Project exploration map
+      (seq explored)
+      (assoc :explored-paths explored)
+
+      ;; Command mix for this project
+      (seq proj-cmds)
+      (assoc :project-commands proj-cmds)
+
+      ;; Total stats
+      true
+      (assoc :total-calls (count entries)))))

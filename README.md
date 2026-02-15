@@ -27,6 +27,7 @@ spai usages my_func src/    # Where is this symbol used?
 spai def MyStruct src/      # Where is it defined?
 spai context my_func src/   # Usages with enclosing function name
 spai blast my_func src/     # Full blast radius before refactoring
+spai deps src/module.rs     # Import graph with file resolution
 spai tests my_module src/   # Related test files (including inline)
 spai hotspots src/          # Top 20 largest files
 spai todos src/             # TODO/FIXME/HACK scan
@@ -36,6 +37,7 @@ spai antipatterns src/      # Scan for project-defined antipatterns
 spai changes src/ 5         # Recent git commits
 spai related mod.rs         # Co-change analysis: implicit coupling
 spai diff mod.rs 3          # Actual diff content for recent changes
+spai diff-shape src/ HEAD~5 # Structural diff: functions added/removed/changed
 spai narrative mod.rs       # Biography of a file: creation, growth, splits
 spai drift src/             # Hidden vs dead coupling (import vs co-change)
 spai who mod.rs src/        # Reverse dependencies: who imports this?
