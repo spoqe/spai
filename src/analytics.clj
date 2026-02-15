@@ -2,8 +2,11 @@
 ;; Self-awareness. What gets used? What's missing?
 
 (def ^:private log-file
-  "Append-only usage log. EDN records, one per line."
-  (str (System/getProperty "user.dir") "/.spai/usage.log"))
+  "Append-only usage log. EDN records, one per line.
+   Lives in XDG_DATA_HOME (typically ~/.local/share/spai/)."
+  (str (or (System/getenv "XDG_DATA_HOME")
+           (str (System/getProperty "user.home") "/.local/share"))
+       "/spai/usage.log"))
 
 (def ^:private log-max-lines
   "Keep the most recent N entries. ~15MB at capacity. Revisit after a
