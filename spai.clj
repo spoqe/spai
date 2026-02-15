@@ -174,6 +174,7 @@
                      (pp/pprint (antipatterns name path)))
     "stats"    (pp/pprint (stats))
     "reflect"  (pp/pprint (reflect))
+    "setup"    (load-file (str spai-dir "/setup.clj"))
     ("help" "--help" "-h") (pp/pprint commands)
     nil (pp/pprint commands)
     ;; Extension: look for spai-<command> in PATH
