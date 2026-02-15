@@ -76,6 +76,12 @@
    :narrative {:args   "[file] [--n N]"
                :returns "biography of a file: creation, growth, splits, stabilization"
                :example "./spai narrative spoqe-exec/src/federation/mod.rs"}
+   :drift     {:args    "[path] [--n N] [--min-pct N]"
+               :returns "implicit vs explicit architecture: hidden and dead coupling"
+               :example "./spai drift spoqe-exec/src/"}
+   :patterns  {:args    "[path]"
+               :returns "discover naming and structural conventions in the codebase"
+               :example "./spai patterns spoqe-exec/src/"}
    :changes      {:args    "[path] [n]"
                   :returns "recent commits with files touched"
                   :example "./spai changes src/ 3"}
@@ -136,6 +142,20 @@
                                (parse-long (nth opts (inc i)))))]
                   (log-usage! "narrative" args {:file file})
                   (pp/pprint (narrative file :n (or n 500))))
+    "drift"    (let [path    (first args)
+                     opts    (rest args)
+                     n       (when-let [i (.indexOf (vec opts) "--n")]
+                               (when (>= (count opts) (+ i 2))
+                                 (parse-long (nth opts (inc i)))))
+                     min-pct (when-let [i (.indexOf (vec opts) "--min-pct")]
+                               (when (>= (count opts) (+ i 2))
+                                 (parse-long (nth opts (inc i)))))]
+                 (log-usage! "drift" args {:path path})
+                 (pp/pprint (drift path
+                                   :n (or n 100)
+                                   :min-pct (or min-pct 15))))
+    "patterns" (do (log-usage! "patterns" args {:path (first args)})
+                   (pp/pprint (patterns (first args))))
     "changes"      (do (log-usage! "changes" args {:path (first args)})
                        (pp/pprint (changes (first args) (some-> (second args) parse-long))))
     "antipatterns" (let [;; If first arg looks like a path (contains / or .), treat it as path not name

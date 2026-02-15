@@ -1,4 +1,4 @@
-;; spai/git — changes, related, diff, narrative
+;; spai/git — changes, related, diff, narrative, drift
 ;; Git history analysis commands.
 
 (defn changes
@@ -203,3 +203,103 @@
                                (when-let [r (:refactor phase-counts)] (str r " refactors. "))
                                (when-let [s (:split phase-counts)] (str s " splits. "))
                                (when current-lines (str "Currently " current-lines " lines."))))}))))
+
+;; -------------------------------------------------------------------
+;; drift — implicit vs explicit architecture
+;; -------------------------------------------------------------------
+
+(defn- file-imports
+  "Extract what modules/files this file imports. Returns set of base names."
+  [file]
+  (try
+    (let [content (slurp file)
+          lines   (str/split-lines content)]
+      (->> lines
+           (keep (fn [line]
+                   (or
+                     ;; Rust: use crate::foo::bar → bar
+                     (when-let [[_ mod] (re-find #"use\s+(?:crate::)?(?:\w+::)*(\w+)" line)]
+                       mod)
+                     ;; TypeScript: import ... from './foo' → foo
+                     (when-let [[_ path] (re-find #"from\s+['\"]\.?\.?/?([^'\"]+)['\"]" line)]
+                       (let [parts (str/split path #"/")]
+                         (last parts)))
+                     ;; Rust: mod foo → foo
+                     (when-let [[_ mod] (re-find #"^\s*(?:pub\s+)?mod\s+(\w+)" line)]
+                       mod))))
+           (map #(str/replace % #"\.\w+$" "")) ;; strip extensions
+           set))
+    (catch Exception _ #{})))
+
+(defn drift
+  "Compare implicit architecture (co-change) with explicit architecture (imports).
+   The gap between what the module system claims and what actually co-varies IS drift.
+
+   For each source file in path: what co-changes but isn't imported (hidden coupling)?
+   What's imported but never co-changes (dead coupling)?"
+  [path & {:keys [n min-pct] :or {n 100 min-pct 15}}]
+  (let [root   (io/file (or path "."))
+        ;; Find source files
+        files  (->> (file-seq root)
+                    (filter #(.isFile %))
+                    (remove #(some skip-dirs (str/split (.getPath %) #"/")))
+                    (filter #(re-find source-exts (.getName %)))
+                    (mapv #(.getPath %)))
+
+        ;; For each file: get co-change partners and import partners
+        analyze (fn [file]
+                  (let [base      (let [n (.getName (io/file file))]
+                                    (if-let [dot (str/last-index-of n ".")]
+                                      (subs n 0 dot) n))
+                        imports   (file-imports file)
+                        ;; Get co-change data (reuse related logic)
+                        rel-data  (related file :n n :min-pct min-pct)
+                        co-files  (when-not (:error rel-data)
+                                    (->> (:related rel-data)
+                                         (map (fn [{:keys [file pct]}]
+                                                (let [n (.getName (io/file file))]
+                                                  {:file file
+                                                   :base (if-let [d (str/last-index-of n ".")]
+                                                           (subs n 0 d) n)
+                                                   :pct  pct})))
+                                         vec))
+                        co-bases  (set (map :base (or co-files [])))
+                        ;; Hidden coupling: co-changes but not imported
+                        hidden    (->> (or co-files [])
+                                       (remove #(contains? imports (:base %)))
+                                       (remove #(= (:base %) base))
+                                       vec)
+                        ;; Dead coupling: imported but never co-changes
+                        dead      (->> imports
+                                       (remove #(contains? co-bases %))
+                                       (remove #{base})
+                                       sort vec)]
+                    (when (or (seq hidden) (seq dead))
+                      {:file    file
+                       :hidden  hidden  ;; co-change without import = implicit coupling
+                       :dead    dead    ;; import without co-change = possibly stale
+                       :imports (count imports)
+                       :co-changes (count (or co-files []))})))
+
+        ;; Only analyze files with git history (skip tiny/new files)
+        results (->> files
+                     (keep analyze)
+                     ;; Sort by most hidden coupling first
+                     (sort-by #(- (count (:hidden %))))
+                     (take 20)
+                     vec)
+
+        ;; Aggregate stats
+        total-hidden (->> results (mapcat :hidden) count)
+        total-dead   (->> results (map #(count (:dead %))) (reduce +))]
+
+    {:path         (or path ".")
+     :files-analyzed (count files)
+     :files-with-drift (count results)
+     :total-hidden-coupling total-hidden
+     :total-dead-coupling total-dead
+     :drift        results
+     :insight      (when (> total-hidden 0)
+                     (let [worst (first results)]
+                       (str (:file worst) " has " (count (:hidden worst))
+                            " hidden dependencies. The module boundary is lying.")))}))

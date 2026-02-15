@@ -1,4 +1,4 @@
-;; spai/code — shape, usages, definition, sig, who, context
+;; spai/code — shape, usages, definition, sig, who, context, patterns
 ;; Code structure analysis commands.
 
 (defn- shape-raw
@@ -210,3 +210,114 @@
                         frequencies
                         (sort-by val >)
                         vec)}))))
+
+;; -------------------------------------------------------------------
+;; patterns — inductive convention discovery
+;; -------------------------------------------------------------------
+
+(defn patterns
+  "Discover the conventions this codebase actually follows.
+   Not prescriptive (antipatterns) — descriptive. What patterns exist?
+   Learn the codebase's own dialect."
+  [path]
+  (let [path (or path ".")
+        raw  (shape-raw path)
+        lang (:lang raw)]
+    (if-not raw
+      {:path path :error "No patterns for this language yet"}
+      (let [fns    (:functions raw)
+            types  (:types raw)
+
+            ;; Function naming conventions
+            fn-names   (keep :name fns)
+            fn-prefixes (->> fn-names
+                             (keep #(second (re-find #"^([a-z]+_)" %)))
+                             frequencies
+                             (filter #(>= (val %) 3))  ;; at least 3 uses = convention
+                             (sort-by val >)
+                             vec)
+            fn-suffixes (->> fn-names
+                             (keep #(second (re-find #"_([a-z]+)$" %)))
+                             frequencies
+                             (filter #(>= (val %) 3))
+                             (sort-by val >)
+                             vec)
+
+            ;; Type naming conventions
+            type-names  (keep :name types)
+            type-suffixes (->> type-names
+                               (keep #(second (re-find #"([A-Z][a-z]+)$" %)))
+                               frequencies
+                               (filter #(>= (val %) 2))
+                               (sort-by val >)
+                               vec)
+
+            ;; File naming conventions
+            files  (->> (file-seq (io/file path))
+                        (filter #(.isFile %))
+                        (remove #(some skip-dirs (str/split (.getPath %) #"/")))
+                        (filter #(re-find source-exts (.getName %)))
+                        (map #(.getName %)))
+            file-patterns (->> files
+                               (keep #(second (re-find #"^(.+?)[_.]" %)))
+                               frequencies
+                               (filter #(>= (val %) 2))
+                               (sort-by val >)
+                               vec)
+            file-suffixes (->> files
+                               (keep (fn [f]
+                                       (let [no-ext (if-let [d (str/last-index-of f ".")] (subs f 0 d) f)]
+                                         (second (re-find #"[_.]([a-z]+)$" no-ext)))))
+                               frequencies
+                               (filter #(>= (val %) 2))
+                               (sort-by val >)
+                               vec)
+
+            ;; Structural patterns: functions per file distribution
+            by-file    (->> fns (group-by :file))
+            fns-per-file (->> by-file
+                              (map (fn [[_ fs]] (count fs)))
+                              sort vec)
+            median-fns (when (seq fns-per-file)
+                         (nth fns-per-file (/ (count fns-per-file) 2)))
+
+            ;; Visibility patterns (Rust-specific)
+            visibility (when (= lang :rust)
+                         (let [pub-fns  (count (filter #(re-find #"^\s*pub\s" (:text %)) fns))
+                               priv-fns (- (count fns) pub-fns)]
+                           {:public pub-fns :private priv-fns
+                            :ratio (when (pos? (count fns))
+                                     (str (Math/round (* 100.0 (/ pub-fns (count fns)))) "% public"))}))]
+
+        {:path       path
+         :language   lang
+         :total-fns  (count fns)
+         :total-types (count types)
+         :naming
+         {:fn-prefixes   fn-prefixes
+          :fn-suffixes   fn-suffixes
+          :type-suffixes type-suffixes
+          :file-prefixes file-patterns
+          :file-suffixes file-suffixes}
+         :structure
+         {:fns-per-file    {:median median-fns :distribution fns-per-file}
+          :files-with-fns  (count by-file)
+          :visibility      visibility}
+         :conventions
+         (vec (remove nil?
+           [(when (seq fn-prefixes)
+              (str "Function prefix conventions: "
+                   (str/join ", " (map #(str (key %) " (" (val %) "x)") (take 5 fn-prefixes)))))
+            (when (seq fn-suffixes)
+              (str "Function suffix conventions: "
+                   (str/join ", " (map #(str (key %) " (" (val %) "x)") (take 5 fn-suffixes)))))
+            (when (seq type-suffixes)
+              (str "Type suffix conventions: "
+                   (str/join ", " (map #(str (key %) " (" (val %) "x)") (take 5 type-suffixes)))))
+            (when (seq file-suffixes)
+              (str "File suffix conventions: "
+                   (str/join ", " (map #(str (key %) " (" (val %) "x)") (take 5 file-suffixes)))))
+            (when (and median-fns (> median-fns 10))
+              (str "Files tend to be large (median " median-fns " functions)"))
+            (when (and visibility (> (get-in visibility [:public] 0) (* 2 (get-in visibility [:private] 0))))
+              "Most functions are public — consider tightening visibility")]))}))))
