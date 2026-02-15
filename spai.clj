@@ -175,7 +175,12 @@
     "stats"    (pp/pprint (stats))
     "reflect"  (pp/pprint (reflect))
     "setup"    (load-file (str spai-dir "/setup.clj"))
-    ("help" "--help" "-h") (pp/pprint commands)
+    ("help" "--help" "-h") (do (pp/pprint commands)
+                               (println)
+                               (println "Extend spai:")
+                               (println "  Project plugins:  .spai/plugins/spai-<name>   (babashka, project-specific)")
+                               (println "  Global plugins:   ~/.local/share/spai/plugins/spai-<name>")
+                               (println "  PRs welcome:      https://github.com/SP-Lucky-Goose/spai"))
     nil (pp/pprint commands)
     ;; Extension: look for spai-<command> in PATH
     (let [ext-cmd (str "spai-" command)
