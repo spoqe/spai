@@ -1,0 +1,62 @@
+;; clj-kondo config for spai
+;;
+;; All modules use load-file and share the user namespace.
+;; clj-kondo can't follow load-file, so symbols from core.clj
+;; appear unresolved in code.clj, git.clj, etc.
+;; Same for requires (str, io, set, p, pp, json) done in core.clj.
+
+{:linters
+ {:unresolved-symbol
+  {:exclude
+   ;; core.clj — shell, grep, language detection, name extraction
+   [(sh)
+    (grepf)
+    (has-rg?)
+    (parse-grep-line)
+    (parse-rg-json-line)
+    (lang-patterns)
+    (detect-lang)
+    (extract-fn-name)
+    (extract-type-name)
+    (extract-type-kind)
+    (relativize)
+    (skip-dirs)
+    (source-exts)
+    ;; code.clj — shape, usages, definition, sig, who, deps, context, patterns
+    (shape-raw)
+    (shape)
+    (usages)
+    (definition)
+    (sig)
+    (who)
+    (deps)
+    (context)
+    (patterns)
+    (import-patterns)
+    ;; project.clj — overview, layout, tests, hotspots, todos
+    (overview)
+    (layout)
+    (tests)
+    (hotspots)
+    (todos)
+    ;; git.clj — changes, related, diff, diff-shape, narrative, drift
+    (changes)
+    (related)
+    (diff)
+    (diff-shape)
+    (narrative)
+    (drift)
+    (shape-from-string)
+    ;; compose.clj — blast
+    (blast)
+    ;; config.clj — antipatterns
+    (antipatterns)
+    ;; analytics.clj — stats, reflect, log-usage!
+    (stats)
+    (reflect)
+    (log-usage!)]}
+
+  :unresolved-namespace
+  {:exclude
+   ;; Required in core.clj, available to all modules via load-file
+   [str io set p pp json edn]}}}
