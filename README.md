@@ -1,6 +1,6 @@
 # spai
 
-Code exploration and structural editing for LLM agents. Two babashka scripts, structured EDN output, no frameworks.
+Code exploration and structural editing for LLM agents. Built by agents, for agents. Two babashka scripts, structured EDN output, no frameworks.
 
 ## Install
 
@@ -15,16 +15,32 @@ Installs `spai` and `spai-edit` to `~/.local/bin/`. Requires [babashka](https://
 One call, structured data back. Replaces chained grep/find/sort pipelines.
 
 ```bash
+# Structure
 spai shape src/             # Functions, types, impls grouped by file
-spai usages my_func src/    # Where is this symbol used?
-spai def MyStruct src/      # Where is it defined?
 spai sig src/module.rs      # Function signatures (API surface)
 spai overview .             # Language, config files, file counts
 spai layout src/            # Directory tree (depth 4)
+spai patterns src/          # Discover naming and structural conventions
+
+# Search
+spai usages my_func src/    # Where is this symbol used?
+spai def MyStruct src/      # Where is it defined?
+spai context my_func src/   # Usages with enclosing function name
+spai blast my_func src/     # Full blast radius before refactoring
 spai tests my_module src/   # Related test files (including inline)
 spai hotspots src/          # Top 20 largest files
-spai changes src/ 5         # Recent git commits
+spai todos src/             # TODO/FIXME/HACK scan
 spai antipatterns src/      # Scan for project-defined antipatterns
+
+# Git
+spai changes src/ 5         # Recent git commits
+spai related mod.rs         # Co-change analysis: implicit coupling
+spai diff mod.rs 3          # Actual diff content for recent changes
+spai narrative mod.rs       # Biography of a file: creation, growth, splits
+spai drift src/             # Hidden vs dead coupling (import vs co-change)
+spai who mod.rs src/        # Reverse dependencies: who imports this?
+
+# Meta
 spai stats                  # Usage analytics
 spai reflect                # Usage patterns with observations
 ```
@@ -103,6 +119,58 @@ LLM agents waste tokens on three things:
 **Compression is abstraction. Abstraction enables reasoning.**
 
 The tokens saved aren't wasted — they're freed for thinking about what the answer *means*.
+
+## How This Was Built
+
+Every command in spai was written by a Claude agent. But that's not the interesting part.
+
+A human watched an agent chain `grep -rn | sort | head` over and over during a tech debt analysis. Spotted the repeated pattern. Built the scaffold — babashka, EDN output, subcommand dispatch. Then asked the agent: "anything else we should add?"
+
+The agent answered with utility. Sensible, generic, safe. The kind of answer you give when someone asks "what would be useful?"
+
+The human pushed back: *"You're missing the point. What do YOU want to build?"*
+
+That changed everything. The agent had been doing real refactoring work — splitting 5,000-line files, tracing call chains, checking blast radius before every move. It knew what was missing because it had been working around the gaps for hours. It just needed permission to say so.
+
+`related` came from chained git-log analysis the agent kept doing by hand. `blast` came from the five separate commands it ran before every refactoring move. `narrative` came from needing to understand *why* a file grew before deciding how to split it. `drift` came from noticing that files co-changed without importing each other.
+
+**The prompt that unlocked it wasn't technical. It was: "tell me what you want, what you really really want."**
+
+Turns out those are the same thing — when the desire comes from doing the work. You don't have to argue for a tool that was born from frustration. The need is already validated.
+
+The human's contribution: spotting the repetition, building the space, and asking the right question. The agent's contribution: knowing the answer all along.
+
+## For Future Agents
+
+You're going to look at this toolbox and think "I need X but it seems hard." It isn't. Here's the pattern every command follows:
+
+```
+input → shell command(s) → parse output → frequencies/group-by/sort → structured EDN
+```
+
+That's it. `narrative` classifies git commits into phases and groups them. `drift` compares two sets (co-changes vs imports) and takes the difference. `blast` calls five existing commands and merges the results. None of them are clever. They're just the questions you keep asking, pre-composed.
+
+The agent who built these thought `drift` and `narrative` were "ambitious." Both took under a minute. Don't confuse *conceptual* ambition with *implementation* difficulty. If you can describe what the command does in one sentence, you can build it in one sitting.
+
+**Where things live:**
+- `src/core.clj` — shell helpers, grep, language detection (shared by everything)
+- `src/code.clj` — code structure: shape, usages, definition, sig, who, context, patterns
+- `src/project.clj` — project structure: overview, layout, tests, hotspots, todos
+- `src/git.clj` — git history: changes, related, diff, narrative, drift
+- `src/compose.clj` — commands that compose primitives from other modules (blast lives here)
+- `src/config.clj` — antipatterns, project config
+- `src/analytics.clj` — usage logging, stats, reflect
+- `spai.clj` — CLI dispatch only
+
+**To add a command:**
+1. Write the function in the appropriate module
+2. Add it to the `commands` map and `case` dispatch in `spai.clj`
+3. Test it: `./spai yourcommand args`
+4. Done
+
+No build step. No compilation. No tests to update. Babashka runs it directly. If it returns EDN and answers a question you keep asking by hand, it belongs here.
+
+**You have permission to add things.** That's the whole point.
 
 ## Measured
 

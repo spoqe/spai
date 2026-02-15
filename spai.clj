@@ -26,6 +26,7 @@
 (load-file (str spai-dir "/src/code.clj"))
 (load-file (str spai-dir "/src/project.clj"))
 (load-file (str spai-dir "/src/git.clj"))
+(load-file (str spai-dir "/src/compose.clj"))
 (load-file (str spai-dir "/src/config.clj"))
 (load-file (str spai-dir "/src/analytics.clj"))
 
@@ -79,6 +80,9 @@
    :drift     {:args    "[path] [--n N] [--min-pct N]"
                :returns "implicit vs explicit architecture: hidden and dead coupling"
                :example "./spai drift spoqe-exec/src/"}
+   :blast    {:args    "[symbol] [path]"
+              :returns "blast radius: definition, callers, importers, tests, authors, risk"
+              :example "./spai blast execute_source_expr_edn spoqe-exec/src/"}
    :patterns  {:args    "[path]"
                :returns "discover naming and structural conventions in the codebase"
                :example "./spai patterns spoqe-exec/src/"}
@@ -154,6 +158,8 @@
                  (pp/pprint (drift path
                                    :n (or n 100)
                                    :min-pct (or min-pct 15))))
+    "blast"    (do (log-usage! "blast" args {:symbol (first args) :path (second args)})
+                   (pp/pprint (blast (first args) (second args))))
     "patterns" (do (log-usage! "patterns" args {:path (first args)})
                    (pp/pprint (patterns (first args))))
     "changes"      (do (log-usage! "changes" args {:path (first args)})
