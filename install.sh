@@ -33,11 +33,19 @@ info "Downloading spai..."
 if command -v git &>/dev/null; then
   rm -rf "${SHARE_DIR}.tmp"
   git clone --depth 1 "https://github.com/${REPO}.git" "${SHARE_DIR}.tmp" 2>/dev/null
+  # Don't clobber user data (usage.log, plugins, etc.)
+  rm -f "${SHARE_DIR}.tmp/usage.log" 2>/dev/null
+  rm -rf "${SHARE_DIR}.tmp/plugins" 2>/dev/null
   cp -r "${SHARE_DIR}.tmp"/* "$SHARE_DIR/" 2>/dev/null || true
   rm -rf "${SHARE_DIR}.tmp"
 elif command -v curl &>/dev/null; then
+  rm -rf "${SHARE_DIR}.tmp" && mkdir -p "${SHARE_DIR}.tmp"
   curl -sSL "https://github.com/${REPO}/archive/refs/heads/main.tar.gz" | \
-    tar xz --strip-components=1 -C "$SHARE_DIR"
+    tar xz --strip-components=1 -C "${SHARE_DIR}.tmp"
+  rm -f "${SHARE_DIR}.tmp/usage.log" 2>/dev/null
+  rm -rf "${SHARE_DIR}.tmp/plugins" 2>/dev/null
+  cp -r "${SHARE_DIR}.tmp"/* "$SHARE_DIR/" 2>/dev/null || true
+  rm -rf "${SHARE_DIR}.tmp"
 else
   fail "Need git or curl to download. Install one and try again."
 fi
