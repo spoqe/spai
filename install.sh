@@ -32,7 +32,7 @@ warn()  { echo -e "${BOLD}${YELLOW}>>>${RESET} $1"; }
 fail()  { echo -e "${BOLD}${RED}>>>${RESET} $1"; exit 1; }
 
 # Create directories
-mkdir -p "$SHARE_DIR" "$BIN_DIR"
+mkdir -p "$SHARE_DIR" "$SHARE_DIR/plugins" "$BIN_DIR"
 
 if [ -d "$SHARE_DIR/spai.clj" ] || [ -f "$SHARE_DIR/spai.clj" ]; then
   warn "Existing install found. Updating..."
@@ -41,15 +41,9 @@ fi
 # Download
 info "Downloading spai..."
 if command -v git &>/dev/null; then
-  git clone --depth 1 --filter=blob:none --sparse \
-    "https://github.com/${REPO}.git" "${SHARE_DIR}.tmp" 2>/dev/null
-  cd "${SHARE_DIR}.tmp"
-  git sparse-checkout set . 2>/dev/null
-  cd ..
-  cp "${SHARE_DIR}.tmp"/*.clj "$SHARE_DIR/" 2>/dev/null || true
-  cp "${SHARE_DIR}.tmp"/*.md "$SHARE_DIR/" 2>/dev/null || true
-  cp -r "${SHARE_DIR}.tmp"/src "$SHARE_DIR/" 2>/dev/null || true
-  cp -r "${SHARE_DIR}.tmp"/hooks "$SHARE_DIR/" 2>/dev/null || true
+  rm -rf "${SHARE_DIR}.tmp"
+  git clone --depth 1 "https://github.com/${REPO}.git" "${SHARE_DIR}.tmp" 2>/dev/null
+  cp -r "${SHARE_DIR}.tmp"/* "$SHARE_DIR/" 2>/dev/null || true
   rm -rf "${SHARE_DIR}.tmp"
 elif command -v curl &>/dev/null; then
   curl -sSL "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" | \
@@ -65,6 +59,8 @@ info "Creating wrappers in $BIN_DIR..."
 
 cat > "$BIN_DIR/spai" << EOF
 #!/usr/bin/env bash
+# Add plugins dir to PATH so spai-* plugins are discoverable
+export PATH="$SHARE_DIR/plugins:\$PATH"
 bb "$SHARE_DIR/spai.clj" "\$@"
 EOF
 chmod +x "$BIN_DIR/spai"
@@ -233,4 +229,5 @@ echo "  spai help"
 echo "  spai-edit help"
 echo ""
 echo "  Per-project config: create .spai.edn"
+echo "  Custom commands: drop spai-* scripts in $SHARE_DIR/plugins/"
 echo "  Docs: $SHARE_DIR/README.md"
