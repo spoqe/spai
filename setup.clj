@@ -156,8 +156,9 @@
     (println "  spai help")
     (println "  spai-edit help")
     (println)
-    (println (str "  Per-project config: create .spai.edn"))
-    (println (str "  Custom commands: drop spai-* scripts in " share-dir "/plugins/"))
+    (println (str "  Per-project config: .spai/config.edn"))
+    (println (str "  Project plugins:   .spai/plugins/"))
+    (println (str "  Global plugins:    " share-dir "/plugins/"))
     (println (str "  Docs: " share-dir "/README.md"))))
 
 (apply -main *command-line-args*)

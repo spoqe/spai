@@ -47,11 +47,20 @@ chmod +x "$SHARE_DIR"/*.clj 2>/dev/null || true
 # Create bin wrappers
 info "Creating wrappers in $BIN_DIR..."
 
-cat > "$BIN_DIR/spai" << EOF
+cat > "$BIN_DIR/spai" << 'WRAPPER'
 #!/usr/bin/env bash
-export PATH="$SHARE_DIR/plugins:\$PATH"
-bb "$SHARE_DIR/spai.clj" "\$@"
-EOF
+# Global plugins
+export PATH="SHARE_DIR_PLACEHOLDER/plugins:$PATH"
+# Project-local plugins: walk up from CWD
+_d="$PWD"
+while [ "$_d" != "/" ]; do
+  [ -d "$_d/.spai/plugins" ] && export PATH="$_d/.spai/plugins:$PATH" && break
+  _d="$(dirname "$_d")"
+done
+unset _d
+bb "SHARE_DIR_PLACEHOLDER/spai.clj" "$@"
+WRAPPER
+sed -i '' "s|SHARE_DIR_PLACEHOLDER|$SHARE_DIR|g" "$BIN_DIR/spai"
 chmod +x "$BIN_DIR/spai"
 
 cat > "$BIN_DIR/spai-edit" << EOF

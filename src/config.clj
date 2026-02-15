@@ -1,19 +1,25 @@
-;; spai/config — project config (.spai.edn) and antipatterns
+;; spai/config — project config (.spai/config.edn) and antipatterns
 ;; Convention-based project scanning.
 
+(defn- try-read-config
+  "Try to read and parse an EDN config file. Returns parsed value or nil."
+  [^java.io.File f]
+  (when (.exists f)
+    (try (read-string (slurp f))
+         (catch Exception e
+           (binding [*out* *err*]
+             (println (str "Warning: failed to parse " (.getPath f) ": " (.getMessage e))))
+           nil))))
+
 (defn- find-config
-  "Walk up from path looking for .spai.edn. Returns parsed config or nil."
+  "Walk up from path looking for .spai/config.edn (preferred) or .spai.edn (legacy).
+   Returns parsed config or nil."
   [start-path]
   (loop [dir (io/file (or start-path "."))]
     (when dir
-      (let [cfg (io/file dir ".spai.edn")]
-        (if (.exists cfg)
-          (try (read-string (slurp cfg))
-               (catch Exception e
-                 (binding [*out* *err*]
-                   (println (str "Warning: failed to parse " (.getPath cfg) ": " (.getMessage e))))
-                 nil))
-          (recur (.getParentFile dir)))))))
+      (or (try-read-config (io/file dir ".spai" "config.edn"))
+          (try-read-config (io/file dir ".spai.edn"))
+          (recur (.getParentFile dir))))))
 
 (def ^:private project-config
   "Lazily loaded project config. Found once, cached."
@@ -26,7 +32,7 @@
   (let [config @project-config
         pats   (:antipatterns config)]
     (if (empty? pats)
-      {:error "No antipatterns defined. Add :antipatterns to .spai.edn"
+      {:error "No antipatterns defined. Add :antipatterns to .spai/config.edn"
        :hint  "See spai/README.md for config format."}
       (let [selected (if (and name (seq name))
                        (if-let [p (get pats (keyword name))]
