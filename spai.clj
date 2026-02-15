@@ -51,6 +51,9 @@
    :who     {:args     "[file] [path]"
              :returns  "reverse dependencies: who imports/uses this file?"
              :example  "spai who my-crate/src/processor.rs my-crate/src/"}
+   :deps    {:args     "[file|path]"
+             :returns  "import graph with file resolution (Rust, TypeScript), extraction only for others"
+             :example  "spai deps my-crate/src/service/mod.rs"}
    :context {:args     "[symbol] [path]"
              :returns  "usages with enclosing function name"
              :example  "spai context process_query my-crate/src/"}
@@ -117,6 +120,8 @@
                   (pp/pprint (sig (first args))))
     "who"     (do (log-usage! "who" args {:file (first args) :path (second args)})
                   (pp/pprint (who (first args) (second args))))
+    "deps"    (do (log-usage! "deps" args {:path (first args)})
+                  (pp/pprint (deps (first args))))
     "context" (do (log-usage! "context" args {:symbol (first args) :path (second args)})
                   (pp/pprint (context (first args) (second args))))
     "overview" (do (log-usage! "overview" args {:path (first args)})
