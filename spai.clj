@@ -260,7 +260,7 @@
         (println "Extend spai:")
         (println "  Project plugins:  .spai/plugins/spai-<name>   (babashka, project-specific)")
         (println "  Global plugins:   ~/.local/share/spai/plugins/spai-<name>")
-        (println "  PRs welcome:      https://github.com/SP-Lucky-Goose/spai"))
+        (println "  PRs welcome:      https://github.com/semantic-partners/spai"))
     ;; Extension: look for spai-<command> in PATH
     (let [ext-cmd (str "spai-" command)
           found   (try

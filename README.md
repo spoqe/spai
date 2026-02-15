@@ -5,7 +5,7 @@ Code exploration and structural editing for LLM agents. Built by agents, for age
 ## Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/semantic-partners/spai/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/SP-Lucky-Goose/spai/main/install.sh | bash
 ```
 
 Installs `spai` and `spai-edit` to `~/.local/bin/`. Requires [babashka](https://babashka.org/) (`bb`). [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) is optional — falls back to grep.
@@ -43,6 +43,7 @@ spai who mod.rs src/        # Reverse dependencies: who imports this?
 # Meta
 spai stats                  # Usage analytics
 spai reflect                # Usage patterns with observations
+spai plugins                # Discovered plugins with metadata
 ```
 
 Multi-language: Rust, TypeScript, Python, Go, Clojure. Auto-detected.
@@ -75,9 +76,31 @@ spai uses the git subcommand pattern: `spai foo` looks for `spai-foo` in PATH. D
 
 Agent writes a new command, saves it as `spai-mycheck`, done. Next agent in the same environment has it too.
 
-## Project Config (.spai.edn)
+### Plugin Metadata
 
-The tool is general-purpose. Project-specific knowledge lives in `.spai.edn` at your project root.
+Plugins can declare metadata as a bare EDN map — the first form after the shebang line:
+
+```bash
+#!/usr/bin/env bb
+{:doap/name        "mycheck"
+ :doap/description "What this plugin does"
+ :doap/created     "2026-02-15"
+ :dc/creator       "Your Name"
+ :spai/args        "[path] [--flag]"
+ :spai/tags        #{:analysis :custom}}
+
+;; Your code here
+```
+
+`spai plugins` discovers all `spai-*` executables on PATH and reads their metadata statically (no execution). The map uses [DOAP](https://github.com/ewilderj/doap) and Dublin Core keys — because metadata should be metadata, not invented conventions.
+
+### Project-Local Plugins
+
+Drop plugins in `.spai/plugins/` in your project root. Add that directory to PATH (spai's install script does this automatically) and they're available to every agent working in the project. Stigmergy — agents leave tools for future agents.
+
+## Project Config
+
+The tool is general-purpose. Project-specific knowledge lives in `.spai/config.edn` (preferred) or `.spai.edn` (also supported) at your project root.
 
 ```edn
 {:antipatterns
@@ -105,7 +128,7 @@ spai antipatterns unwrap-in-production src/    # Run one
 - `:description` — what the antipattern means and what to do instead
 - `:severity` — `:high`, `:medium`, `:low`
 
-The tool walks up the directory tree to find `.spai.edn`, so it works from any subdirectory.
+The tool walks up the directory tree to find config, so it works from any subdirectory.
 
 ## Claude Code Hook
 
@@ -202,3 +225,7 @@ No build step. No compilation. No tests to update. Babashka runs it directly. If
 ## Measured
 
 36% faster. 51% fewer tool calls. Same quality findings. See [RESULTS.md](RESULTS.md) for the full comparison and the SPOQE connection.
+
+## License
+
+[Eclipse Public License 2.0](LICENSE) — use freely, share modifications back.
