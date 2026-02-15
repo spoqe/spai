@@ -94,12 +94,55 @@ else
   echo ""
 fi
 
-# Check PATH
+# Check PATH and offer to fix
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-  warn "$BIN_DIR is not in your PATH"
-  echo "  Add to your shell config:"
-  echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-  echo ""
+  # Detect shell rc file
+  RC_FILE=""
+  SHELL_NAME="$(basename "$SHELL")"
+  case "$SHELL_NAME" in
+    zsh)  RC_FILE="$HOME/.zshrc" ;;
+    bash)
+      # macOS uses .bash_profile for login shells, Linux uses .bashrc
+      if [ -f "$HOME/.bash_profile" ]; then
+        RC_FILE="$HOME/.bash_profile"
+      else
+        RC_FILE="$HOME/.bashrc"
+      fi ;;
+    fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
+  esac
+
+  PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+  [ "$SHELL_NAME" = "fish" ] && PATH_LINE='set -gx PATH $HOME/.local/bin $PATH'
+
+  if [ -n "$RC_FILE" ] && [ -t 0 ] && [ -t 1 ]; then
+    # Interactive — check if already there, then offer to add
+    if [ -f "$RC_FILE" ] && grep -qF '.local/bin' "$RC_FILE" 2>/dev/null; then
+      info "$BIN_DIR already in $RC_FILE (restart shell or: source $RC_FILE)"
+    else
+      warn "$BIN_DIR is not in your PATH"
+      read -p "  Add to $RC_FILE? [Y/n] " -n 1 -r
+      echo ""
+      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        echo "" >> "$RC_FILE"
+        echo "# spai" >> "$RC_FILE"
+        echo "$PATH_LINE" >> "$RC_FILE"
+        info "Added to $RC_FILE — restart shell or: source $RC_FILE"
+      else
+        echo "  Add manually: $PATH_LINE"
+        echo ""
+      fi
+    fi
+  else
+    # Non-interactive or unknown shell
+    warn "$BIN_DIR is not in your PATH"
+    if [ -n "$RC_FILE" ]; then
+      echo "  Add to $RC_FILE:"
+    else
+      echo "  Add to your shell config:"
+    fi
+    echo "  $PATH_LINE"
+    echo ""
+  fi
 fi
 
 # -------------------------------------------------------------------
