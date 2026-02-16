@@ -1,0 +1,203 @@
+#!/usr/bin/env bb
+;; spai plugin: errors-rust
+;;
+;; Categorize Rust cargo build errors for large-scale refactoring.
+;; Parses cargo output, groups by error code/pattern, suggests fixes.
+;;
+;; Usage:  cargo build 2>&1 | spai errors-rust
+;;         spai errors-rust build.log
+;;         spai errors-rust --baseline build.log  (saves counts)
+;;         spai errors-rust --compare build.log   (compares to baseline)
+
+{:spai/args    "[--baseline|--compare] [file|-]"
+ :spai/returns "EDN map of error categories, counts, patterns, suggestions"
+ :spai/example "cargo build 2>&1 | spai errors-rust"}
+
+(require '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[clojure.pprint :as pp])
+
+(def args *command-line-args*)
+
+;; Parse args
+(def baseline-mode? (some #{"--baseline"} args))
+(def compare-mode? (some #{"--compare"} args))
+(def input-file (last (remove #(str/starts-with? % "--") args)))
+
+;; Baseline file location
+(def baseline-file ".spai-errors-baseline.edn")
+
+;; Read input
+(def input-lines
+  (cond
+    (or (nil? input-file) (= input-file "-"))
+    (line-seq (io/reader *in*))
+
+    (.exists (io/file input-file))
+    (line-seq (io/reader input-file))
+
+    :else
+    (do
+      (binding [*out* *err*]
+        (println "Error: file not found:" input-file))
+      (System/exit 1))))
+
+;; Error patterns
+(def error-patterns
+  [{:code "E0308" :name :type-mismatch
+    :pattern #"mismatched types|expected .*, found .*"
+    :suggestion "Check type conversions, use .into() or explicit casts"}
+
+   {:code "E0425" :name :unresolved-name
+    :pattern #"cannot find|unresolved import"
+    :suggestion "Add imports or check module paths"}
+
+   {:code "E0433" :name :unresolved-import
+    :pattern #"failed to resolve: use of undeclared"
+    :suggestion "Verify module exists and is in scope"}
+
+   {:code "E0599" :name :no-method
+    :pattern #"no method named|no field|no associated item"
+    :suggestion "Check trait imports, method signatures, or add missing implementations"}
+
+   {:code "E0277" :name :trait-not-implemented
+    :pattern #"the trait .* is not implemented"
+    :suggestion "Implement required trait or use type that already implements it"}
+
+   {:code "E0061" :name :wrong-arg-count
+    :pattern #"this (?:function|method) takes .* but .* were supplied"
+    :suggestion "Check function signature and call site arguments"}
+
+   {:code "E0609" :name :no-field
+    :pattern #"no field .* on type"
+    :suggestion "Check struct definition or use accessor methods"}
+
+   {:code "E0560" :name :unknown-field
+    :pattern #"struct .* has no field named"
+    :suggestion "Check struct definition for correct field names"}
+
+   {:code "E0412" :name :unresolved-type
+    :pattern #"cannot find type .* in this scope"
+    :suggestion "Add type import or check definition"}
+
+   {:code "E0382" :name :use-after-move
+    :pattern #"borrow of moved value|use of moved value"
+    :suggestion "Clone value before move or restructure ownership"}
+
+   {:code "E0369" :name :trait-not-satisfied
+    :pattern #"binary operation .* cannot be applied"
+    :suggestion "Implement required operator trait (Add, Eq, etc.)"}
+
+   {:code "E0283" :name :ambiguous-type
+    :pattern #"type annotations needed|cannot infer type"
+    :suggestion "Add explicit type annotations"}
+
+   {:code "warning" :name :warning
+    :pattern #"^warning:"
+    :suggestion "Consider fixing or allowing with #[allow(...)]"}])
+
+;; Parse a single error/warning
+(defn parse-error [lines]
+  (let [text (str/join "\n" lines)
+        error-line (first lines)
+
+        ;; Extract error code
+        code (when error-line
+               (or (second (re-find #"error\[(\w+)\]" error-line))
+                   (when (str/includes? error-line "warning:") "warning")
+                   "unknown"))
+
+        ;; Match against patterns
+        matched (first (filter #(re-find (:pattern %) text) error-patterns))
+
+        ;; Extract file location
+        location (second (re-find #"([\w/-]+\.rs:\d+:\d+)" error-line))
+
+        ;; Extract error message
+        message (second (re-find #"error(?:\[\w+\])?: (.*)" error-line))]
+
+    {:code code
+     :name (or (:name matched) :other)
+     :location location
+     :message message
+     :suggestion (:suggestion matched)
+     :raw text}))
+
+;; Group consecutive error lines
+(defn group-error-blocks [lines]
+  (let [error-start? #(or (str/starts-with? % "error")
+                          (str/starts-with? % "warning:"))]
+    (->> lines
+         (reduce (fn [acc line]
+                   (if (error-start? line)
+                     (conj acc [line])
+                     (if (empty? acc)
+                       acc
+                       (update acc (dec (count acc)) conj line))))
+                 [])
+         (filter seq))))
+
+;; Categorize all errors
+(defn categorize-errors [input-lines]
+  (let [blocks (group-error-blocks input-lines)
+        errors (map parse-error blocks)
+
+        by-code (group-by :code errors)
+        by-name (group-by :name errors)
+
+        totals (into (sorted-map)
+                     (map (fn [[k v]] [k (count v)]) by-code))
+
+        patterns (into {}
+                       (map (fn [[k v]]
+                              [k {:count (count v)
+                                  :locations (map :location v)
+                                  :suggestion (-> v first :suggestion)}])
+                            by-name))
+
+        total-errors (count (filter #(not= (:code %) "warning") errors))
+        total-warnings (count (filter #(= (:code %) "warning") errors))]
+
+    {:total total-errors
+     :warnings total-warnings
+     :by-code totals
+     :by-pattern patterns
+     :errors (take 10 errors)})) ;; First 10 for inspection
+
+;; Main logic
+(def result (categorize-errors input-lines))
+
+;; Handle baseline mode
+(when baseline-mode?
+  (spit baseline-file (pr-str {:total (:total result)
+                                      :by-code (:by-code result)}))
+  (binding [*out* *err*]
+    (println "Baseline saved to" baseline-file)))
+
+;; Handle compare mode
+(def comparison
+  (when compare-mode?
+    (if (.exists (io/file baseline-file))
+      (let [baseline (read-string (slurp baseline-file))
+            current (:total result)
+            baseline-total (:total baseline)
+            delta (- current baseline-total)
+            pct (if (zero? baseline-total)
+                  0
+                  (* 100.0 (/ delta baseline-total)))]
+        {:baseline baseline-total
+         :current current
+         :delta delta
+         :percent-change (format "%.1f%%" pct)
+         :by-code-delta (into {}
+                              (map (fn [[code curr-count]]
+                                     (let [base-count (get (:by-code baseline) code 0)]
+                                       [code {:was base-count
+                                              :now curr-count
+                                              :delta (- curr-count base-count)}]))
+                                   (:by-code result)))})
+      {:error "No baseline found. Run with --baseline first."})))
+
+;; Output EDN
+(pp/pprint (merge result
+                  (when comparison {:comparison comparison})))
