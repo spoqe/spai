@@ -112,6 +112,41 @@
               :returns "discovered plugins with DOAP metadata (if present)"
               :example "spai plugins"}})
 
+(defn discover-plugins
+  "Find all spai-* executables on PATH and read their metadata"
+  []
+  (let [path-dirs  (str/split (or (System/getenv "PATH") "") #":")
+        is-plugin? (fn [^java.io.File f]
+                     (and (str/starts-with? (.getName f) "spai-")
+                          (.canExecute f)
+                          (.isFile f)))
+        plugin-files (->> path-dirs
+                          (map io/file)
+                          (filter #(.isDirectory %))
+                          (mapcat #(.listFiles %))
+                          (filter is-plugin?)
+                          ;; Dedupe by name (first on PATH wins)
+                          (reduce (fn [acc f]
+                                    (let [n (.getName f)]
+                                      (if (contains? (set (map #(.getName ^java.io.File %) acc)) n)
+                                        acc
+                                        (conj acc f))))
+                                  []))
+        read-meta (fn [^java.io.File f]
+                    (try
+                      (let [form (-> (slurp f)
+                                     (str/replace #"^#!.*\n" "")
+                                     edn/read-string)]
+                        (when (map? form) form))
+                      (catch Exception _ nil)))]
+    (mapv (fn [^java.io.File f]
+            (let [n (str/replace (.getName f) #"^spai-" "")
+                  m (read-meta f)]
+              (merge {:spai/name n
+                      :spai/path (.getAbsolutePath f)}
+                     (or m {}))))
+          plugin-files)))
+
 (let [[command & args] *command-line-args*]
   (case command
     "shape"   (let [full? (some #{"--full"} args)
@@ -194,39 +229,8 @@
                      (pp/pprint (antipatterns name path)))
     "stats"    (pp/pprint (stats))
     "reflect"  (pp/pprint (reflect))
-    "plugins"  (let [path-dirs  (str/split (or (System/getenv "PATH") "") #":")
-                       is-plugin? (fn [^java.io.File f]
-                                    (and (str/starts-with? (.getName f) "spai-")
-                                         (.canExecute f)
-                                         (.isFile f)))
-                       plugin-files (->> path-dirs
-                                         (map io/file)
-                                         (filter #(.isDirectory %))
-                                         (mapcat #(.listFiles %))
-                                         (filter is-plugin?)
-                                         ;; Dedupe by name (first on PATH wins)
-                                         (reduce (fn [acc f]
-                                                   (let [n (.getName f)]
-                                                     (if (contains? (set (map #(.getName ^java.io.File %) acc)) n)
-                                                       acc
-                                                       (conj acc f))))
-                                                 []))
-                       read-meta (fn [^java.io.File f]
-                                   (try
-                                     (let [form (-> (slurp f)
-                                                    (str/replace #"^#!.*\n" "")
-                                                    edn/read-string)]
-                                       (when (map? form) form))
-                                     (catch Exception _ nil)))
-                       results (mapv (fn [^java.io.File f]
-                                       (let [n (str/replace (.getName f) #"^spai-" "")
-                                             m (read-meta f)]
-                                         (merge {:spai/name n
-                                                 :spai/path (.getAbsolutePath f)}
-                                                (or m {}))))
-                                     plugin-files)]
-                   (log-usage! "plugins" args {})
-                   (pp/pprint results))
+    "plugins"  (do (log-usage! "plugins" args {})
+                   (pp/pprint (discover-plugins)))
     "setup"    (load-file (str spai-dir "/setup.clj"))
     "link"     (let [source (or (first args) ".")
                      source-abs (.getCanonicalPath (io/file source))
@@ -270,9 +274,27 @@
                          (println "  Run `bash install.sh` to reinstall from GitHub."))))
                    (println "Not linked (not a symlink). Nothing to do.")))
     ("help" "--help" "-h" nil)
-    (do (println (str "spai: code exploration for LLM agents. " (count commands) " commands."))
-        (println "Extend with plugins:  spai new-plugin <name> [project|user]\n")
-        (pp/pprint commands))
+    (let [;; Mark built-in commands
+          builtins (into {} (map (fn [[k v]] [k (assoc v :spai/type :builtin)]) commands))
+          ;; Discover and convert plugins to command format
+          plugins  (discover-plugins)
+          plugin-cmds (into {}
+                            (map (fn [{:spai/keys [name] :as meta}]
+                                   (let [k (keyword name)]
+                                     [k (merge {:args     (:spai/args meta "")
+                                                :returns  (:spai/returns meta "")
+                                                :example  (:spai/example meta "")
+                                                :spai/type :plugin}
+                                               (select-keys meta [:spai/path]))]))
+                                 plugins))
+          all-cmds (merge builtins plugin-cmds)
+          builtin-count (count builtins)
+          plugin-count  (count plugin-cmds)]
+      (println (str "spai: code exploration for LLM agents. "
+                    builtin-count " built-in commands, "
+                    plugin-count " plugins."))
+      (println "Extend with:  spai new-plugin <name> [project|user]\n")
+      (pp/pprint all-cmds))
     ;; Extension: look for spai-<command> in PATH
     (let [ext-cmd (str "spai-" command)
           found   (try
