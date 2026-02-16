@@ -22,10 +22,11 @@
     (relativize)
     (skip-dirs)
     (source-exts)
-    ;; code.clj — shape, usages, definition, sig, who, deps, context, patterns
+    ;; code.clj — shape, usages, definition, sig, who, deps, context, grep-raw, patterns
     (shape-raw)
     (shape)
     (usages)
+    (grep-raw)
     (definition)
     (sig)
     (who)

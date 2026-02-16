@@ -42,6 +42,9 @@
    :usages  {:args     "[symbol] [path]"
              :returns  "file, line, text for each match"
              :example  "spai usages process_query src/"}
+   :grep    {:args     "[pattern] [path] [flags...]"
+             :returns  "raw pattern search with ripgrep flags"
+             :example  "spai grep 'assert!' src/ -l"}
    :def     {:args     "[symbol] [path]"
              :returns  "definition site(s) only, not usages"
              :example  "spai def MyService my-crate/src/"}
@@ -117,6 +120,9 @@
                  (pp/pprint (shape path :full full?)))
     "usages"  (do (log-usage! "usages" args {:symbol (first args) :path (second args)})
                   (pp/pprint (usages (first args) (second args))))
+    "grep"    (let [[pattern & rest-args] args]
+                (log-usage! "grep" args {:pattern pattern})
+                (pp/pprint (apply grep-raw pattern rest-args)))
     "def"     (do (log-usage! "def" args {:symbol (first args) :path (second args)})
                   (pp/pprint (definition (first args) (second args))))
     "sig"     (do (log-usage! "sig" args {:path (first args)})
