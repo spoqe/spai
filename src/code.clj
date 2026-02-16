@@ -78,6 +78,29 @@
      :count   (count matches)
      :matches (vec matches)}))
 
+(defn grep-raw
+  "Raw pattern search using ripgrep. Supports arbitrary rg flags."
+  [pattern & args]
+  (let [;; Separate path from flags (path doesn't start with -)
+        [path-args flags] (split-with #(not (clojure.string/starts-with? % "-")) args)
+        path (or (first path-args) ".")
+        ;; Use structured output unless user requests otherwise
+        structured? (not (some #{"-l" "--files-with-matches" "-c" "--count" "--no-filename"} flags))]
+    (if structured?
+      ;; Standard mode - use grepf for structured output
+      (let [matches (or (apply grepf pattern path flags) [])]
+        {:pattern pattern
+         :path path
+         :count (count matches)
+         :matches (vec matches)})
+      ;; Pass-through mode - call rg directly, return raw output
+      (let [rg-args (concat ["rg"] flags [pattern path])
+            result (apply babashka.process/shell {:out :string :continue true} rg-args)]
+        {:pattern pattern
+         :path path
+         :flags (vec flags)
+         :output (clojure.string/trim-newline (:out result))}))))
+
 (def ^:private def-patterns
   "Patterns that indicate a definition (not just a usage)."
   {:rust       #"^\s*(pub(\(crate\))?\s+)?(async\s+)?(fn|struct|enum|trait|type|const|static|mod)\s+"

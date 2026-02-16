@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20  # Need git history for changes/diff-shape
+
+      - name: Install babashka
+        run: |
+          curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install
+          chmod +x install
+          sudo ./install
+
+      - name: Verify deps
+        run: |
+          bb --version
+          rg --version  # Pre-installed on GitHub runners
+
+      - name: Load test — all modules parse
+        run: bb spai.clj help
+
+      # --- Code analysis commands ---
+
+      - name: shape
+        run: bb spai.clj shape src/
+
+      - name: usages
+        run: bb spai.clj usages grepf src/
+
+      - name: def
+        run: bb spai.clj def shape-raw src/
+
+      - name: sig
+        run: bb spai.clj sig src/core.clj
+
+      - name: who
+        run: bb spai.clj who src/core.clj src/
+
+      - name: context
+        run: bb spai.clj context grepf src/
+
+      - name: grep
+        run: bb spai.clj grep 'defn-?\s' src/
+
+      - name: patterns
+        run: bb spai.clj patterns src/
+
+      # --- Project analysis commands ---
+
+      - name: overview
+        run: bb spai.clj overview .
+
+      - name: layout
+        run: bb spai.clj layout src/
+
+      - name: hotspots
+        run: bb spai.clj hotspots src/
+
+      - name: todos
+        run: bb spai.clj todos src/
+
+      # --- Git commands ---
+
+      - name: changes
+        run: bb spai.clj changes src/ 3
+
+      - name: diff-shape
+        run: bb spai.clj diff-shape src/ HEAD~1
+
+      - name: diff
+        run: bb spai.clj diff src/core.clj 2
+
+      # --- Structural editing ---
+
+      - name: spai-edit forms
+        run: bb spai-edit.clj forms src/core.clj
+
+      - name: spai-edit validate
+        run: bb spai-edit.clj validate src/core.clj
+
+      - name: spai-edit validate spai.clj
+        run: bb spai-edit.clj validate spai.clj
+
+  install-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install babashka
+        run: |
+          curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install
+          chmod +x install
+          sudo ./install
+
+      - name: Run install.sh
+        run: bash install.sh
+        env:
+          CI: "true"
+
+      - name: Verify spai wrapper
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          spai help
+
+      - name: Verify spai-edit wrapper
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          spai-edit help
