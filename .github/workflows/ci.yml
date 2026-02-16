@@ -20,10 +20,13 @@ jobs:
           chmod +x install
           sudo ./install
 
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+
       - name: Verify deps
         run: |
           bb --version
-          rg --version  # Pre-installed on GitHub runners
+          rg --version
 
       - name: Load test — all modules parse
         run: bb spai.clj help
@@ -101,10 +104,41 @@ jobs:
           chmod +x install
           sudo ./install
 
-      - name: Run install.sh
-        run: bash install.sh
-        env:
-          CI: "true"
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+
+      - name: Simulate install from checkout
+        run: |
+          # install.sh clones from GitHub which fails for private repos.
+          # Simulate the install using the checked-out code instead.
+          SHARE_DIR="$HOME/.local/share/spai"
+          BIN_DIR="$HOME/.local/bin"
+          mkdir -p "$SHARE_DIR" "$BIN_DIR"
+
+          # Copy repo files to share dir
+          cp -r ./* "$SHARE_DIR/"
+          chmod +x "$SHARE_DIR"/*.clj 2>/dev/null || true
+
+          # Create spai wrapper
+          cat > "$BIN_DIR/spai" << WRAPPER
+          #!/usr/bin/env bash
+          export PATH="$SHARE_DIR/plugins:\$PATH"
+          _d="\$PWD"
+          while [ "\$_d" != "/" ]; do
+            [ -d "\$_d/.spai/plugins" ] && export PATH="\$_d/.spai/plugins:\$PATH" && break
+            _d="\$(dirname "\$_d")"
+          done
+          unset _d
+          bb "$SHARE_DIR/spai.clj" "\$@"
+          WRAPPER
+          chmod +x "$BIN_DIR/spai"
+
+          # Create spai-edit wrapper
+          cat > "$BIN_DIR/spai-edit" << WRAPPER
+          #!/usr/bin/env bash
+          bb "$SHARE_DIR/spai-edit.clj" "\$@"
+          WRAPPER
+          chmod +x "$BIN_DIR/spai-edit"
 
       - name: Verify spai wrapper
         run: |
