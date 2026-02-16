@@ -2,45 +2,32 @@
 ;; spai plugin: errors-rust
 ;;
 ;; Categorize Rust cargo build errors for large-scale refactoring.
-;; Parses cargo output, groups by error code/pattern, suggests fixes.
+;; Runs cargo build, caches output, groups by error code/pattern.
 ;;
-;; Usage:  cargo build 2>&1 | spai errors-rust
-;;         spai errors-rust build.log
-;;         spai errors-rust --baseline build.log  (saves counts)
-;;         spai errors-rust --compare build.log   (compares to baseline)
+;; Usage:  spai errors-rust [package]       # Run build and show summary
+;;         spai errors-rust --detail E0308  # Show specific error details
+;;         spai errors-rust --baseline      # Save current counts
+;;         spai errors-rust --compare       # Compare to baseline
 
-{:spai/args    "[--baseline|--compare] [file|-]"
+{:spai/args    "[package|--detail CODE|--baseline|--compare]"
  :spai/returns "EDN map of error categories, counts, patterns, suggestions"
- :spai/example "cargo build 2>&1 | spai errors-rust"}
+ :spai/example "spai errors-rust my-crate"}
 
 (require '[clojure.java.io :as io]
          '[clojure.string :as str]
-         '[clojure.pprint :as pp])
+         '[clojure.pprint :as pp]
+         '[babashka.process :as p])
 
 (def args *command-line-args*)
-
-;; Parse args
-(def baseline-mode? (some #{"--baseline"} args))
-(def compare-mode? (some #{"--compare"} args))
-(def input-file (last (remove #(str/starts-with? % "--") args)))
-
-;; Baseline file location
+(def cache-file "/tmp/spai-errors-rust-cache.txt")
 (def baseline-file ".spai-errors-baseline.edn")
 
-;; Read input
-(def input-lines
-  (cond
-    (or (nil? input-file) (= input-file "-"))
-    (line-seq (io/reader *in*))
-
-    (.exists (io/file input-file))
-    (line-seq (io/reader input-file))
-
-    :else
-    (do
-      (binding [*out* *err*]
-        (println "Error: file not found:" input-file))
-      (System/exit 1))))
+;; Parse args
+(def detail-code (when (some #{"--detail"} args)
+                   (second (drop-while #(not= "--detail" %) args))))
+(def baseline-mode? (some #{"--baseline"} args))
+(def compare-mode? (some #{"--compare"} args))
+(def package (or (first (remove #(str/starts-with? % "--") args)) "my-crate"))
 
 ;; Error patterns
 (def error-patterns
@@ -84,38 +71,30 @@
     :pattern #"borrow of moved value|use of moved value"
     :suggestion "Clone value before move or restructure ownership"}
 
-   {:code "E0369" :name :trait-not-satisfied
-    :pattern #"binary operation .* cannot be applied"
-    :suggestion "Implement required operator trait (Add, Eq, etc.)"}
-
-   {:code "E0283" :name :ambiguous-type
-    :pattern #"type annotations needed|cannot infer type"
-    :suggestion "Add explicit type annotations"}
-
    {:code "warning" :name :warning
     :pattern #"^warning:"
     :suggestion "Consider fixing or allowing with #[allow(...)]"}])
+
+;; Run cargo build if needed
+(defn run-build [pkg]
+  (binding [*out* *err*]
+    (println (str "Building " pkg "...")))
+  (p/shell {:out cache-file :err :out :continue true}
+           "cargo" "build" "-p" pkg)
+  (binding [*out* *err*]
+    (println (str "Build complete. Cached to " cache-file))))
 
 ;; Parse a single error/warning
 (defn parse-error [lines]
   (let [text (str/join "\n" lines)
         error-line (first lines)
-
-        ;; Extract error code
         code (when error-line
                (or (second (re-find #"error\[(\w+)\]" error-line))
                    (when (str/includes? error-line "warning:") "warning")
                    "unknown"))
-
-        ;; Match against patterns
         matched (first (filter #(re-find (:pattern %) text) error-patterns))
-
-        ;; Extract file location
         location (second (re-find #"([\w/-]+\.rs:\d+:\d+)" error-line))
-
-        ;; Extract error message
         message (second (re-find #"error(?:\[\w+\])?: (.*)" error-line))]
-
     {:code code
      :name (or (:name matched) :other)
      :location location
@@ -141,63 +120,78 @@
 (defn categorize-errors [input-lines]
   (let [blocks (group-error-blocks input-lines)
         errors (map parse-error blocks)
-
         by-code (group-by :code errors)
         by-name (group-by :name errors)
-
         totals (into (sorted-map)
                      (map (fn [[k v]] [k (count v)]) by-code))
-
         patterns (into {}
                        (map (fn [[k v]]
                               [k {:count (count v)
-                                  :locations (map :location v)
-                                  :suggestion (-> v first :suggestion)}])
+                                  :locations (take 5 (map :location v))
+                                  :suggestion (-> v first :suggestion)
+                                  :examples (take 3 (map :message v))}])
                             by-name))
-
         total-errors (count (filter #(not= (:code %) "warning") errors))
         total-warnings (count (filter #(= (:code %) "warning") errors))]
-
     {:total total-errors
      :warnings total-warnings
      :by-code totals
      :by-pattern patterns
-     :errors (take 10 errors)})) ;; First 10 for inspection
+     :all-errors errors}))
 
 ;; Main logic
-(def result (categorize-errors input-lines))
+(cond
+  ;; Detail mode: show specific error type
+  detail-code
+  (if (.exists (io/file cache-file))
+    (let [lines (line-seq (io/reader cache-file))
+          result (categorize-errors lines)
+          errors (filter #(= (:code %) detail-code) (:all-errors result))]
+      (pp/pprint {:code detail-code
+                  :count (count errors)
+                  :errors (take 10 errors)}))
+    (do
+      (binding [*out* *err*]
+        (println "No cached build. Run without --detail first."))
+      (System/exit 1)))
 
-;; Handle baseline mode
-(when baseline-mode?
-  (spit baseline-file (pr-str {:total (:total result)
-                                      :by-code (:by-code result)}))
-  (binding [*out* *err*]
-    (println "Baseline saved to" baseline-file)))
+  ;; Normal mode: run build and show summary
+  :else
+  (do
+    (run-build package)
+    (let [lines (line-seq (io/reader cache-file))
+          result (categorize-errors lines)]
 
-;; Handle compare mode
-(def comparison
-  (when compare-mode?
-    (if (.exists (io/file baseline-file))
-      (let [baseline (read-string (slurp baseline-file))
-            current (:total result)
-            baseline-total (:total baseline)
-            delta (- current baseline-total)
-            pct (if (zero? baseline-total)
-                  0
-                  (* 100.0 (/ delta baseline-total)))]
-        {:baseline baseline-total
-         :current current
-         :delta delta
-         :percent-change (format "%.1f%%" pct)
-         :by-code-delta (into {}
-                              (map (fn [[code curr-count]]
-                                     (let [base-count (get (:by-code baseline) code 0)]
-                                       [code {:was base-count
-                                              :now curr-count
-                                              :delta (- curr-count base-count)}]))
-                                   (:by-code result)))})
-      {:error "No baseline found. Run with --baseline first."})))
+      ;; Handle baseline mode
+      (when baseline-mode?
+        (spit baseline-file (pr-str {:total (:total result)
+                                            :by-code (:by-code result)}))
+        (binding [*out* *err*]
+          (println "Baseline saved to" baseline-file)))
 
-;; Output EDN
-(pp/pprint (merge result
-                  (when comparison {:comparison comparison})))
+      ;; Handle compare mode
+      (def comparison
+        (when compare-mode?
+          (if (.exists (io/file baseline-file))
+            (let [baseline (read-string (slurp baseline-file))
+                  current (:total result)
+                  baseline-total (:total baseline)
+                  delta (- current baseline-total)
+                  pct (if (zero? baseline-total) 0
+                          (* 100.0 (/ delta baseline-total)))]
+              {:baseline baseline-total
+               :current current
+               :delta delta
+               :percent-change (format "%.1f%%" pct)
+               :by-code-delta (into {}
+                                    (map (fn [[code curr-count]]
+                                           (let [base-count (get (:by-code baseline) code 0)]
+                                             [code {:was base-count
+                                                    :now curr-count
+                                                    :delta (- curr-count base-count)}]))
+                                         (:by-code result)))})
+            {:error "No baseline found. Run with --baseline first."})))
+
+      ;; Output EDN (without :all-errors to keep it clean)
+      (pp/pprint (merge (dissoc result :all-errors)
+                        (when comparison {:comparison comparison}))))))
