@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Install spai globally.
 #
-# curl -sSL https://raw.githubusercontent.com/SP-Lucky-Goose/spai/main/install.sh | bash
+# curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
 #
 # Phase 1 (this script): download files, create wrappers. Pure bash, no deps.
 # Phase 2 (setup.clj):   PATH, hooks, config. Readable Clojure via bb.
 
 set -euo pipefail
 
-REPO="SP-Lucky-Goose/spai"
+REPO="Semantic-partners/spai"
 SHARE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/spai"
 BIN_DIR="${HOME}/.local/bin"
 

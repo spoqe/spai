@@ -5,10 +5,34 @@ Code exploration and structural editing for LLM agents. Built by agents, for age
 ## Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/SP-Lucky-Goose/spai/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
 ```
 
 Installs `spai` and `spai-edit` to `~/.local/bin/`. Requires [babashka](https://babashka.org/) (`bb`). [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) is optional — falls back to grep.
+
+## Claude Code (MCP)
+
+spai works as a native MCP tool server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "spai": {
+      "type": "stdio",
+      "command": "bb",
+      "args": ["~/.local/share/spai/spai-mcp.bb"]
+    }
+  }
+}
+```
+
+Or register globally:
+
+```bash
+claude mcp add --transport stdio spai -- bb ~/.local/share/spai/spai-mcp.bb
+```
+
+This gives Claude direct access to `shape`, `blast`, `context`, `who`, `related`, `drift`, `narrative`, and `errors_rust` as native tools — no shell pipelines, no output parsing.
 
 ## spai — Code Exploration
 
