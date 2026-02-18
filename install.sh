@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install spai globally.
 #
-# curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
+# Public:  curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
+# Private: git clone git@github.com:Semantic-partners/spai.git && cd spai && ./install.sh
 #
 # Phase 1 (this script): download files, create wrappers. Pure bash, no deps.
 # Phase 2 (setup.clj):   PATH, hooks, config. Readable Clojure via bb.
@@ -29,16 +30,24 @@ mkdir -p "$SHARE_DIR" "$SHARE_DIR/plugins" "$BIN_DIR"
 
 [ -f "$SHARE_DIR/spai.clj" ] && warn "Existing install found. Updating..."
 
-info "Downloading spai..."
-if command -v git &>/dev/null; then
+# Detect: are we running from inside a clone?
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -f "$SCRIPT_DIR/spai.clj" ]; then
+  info "Installing from local clone ($SCRIPT_DIR)..."
+  # Don't clobber user data (usage.log, plugins, etc.)
+  rsync -a --exclude='usage.log' --exclude='plugins/' --exclude='.git/' \
+    "$SCRIPT_DIR/" "$SHARE_DIR/"
+elif command -v git &>/dev/null; then
+  info "Downloading spai..."
   rm -rf "${SHARE_DIR}.tmp"
   git clone --depth 1 "https://github.com/${REPO}.git" "${SHARE_DIR}.tmp" 2>/dev/null
-  # Don't clobber user data (usage.log, plugins, etc.)
   rm -f "${SHARE_DIR}.tmp/usage.log" 2>/dev/null
   rm -rf "${SHARE_DIR}.tmp/plugins" 2>/dev/null
   cp -r "${SHARE_DIR}.tmp"/* "$SHARE_DIR/" 2>/dev/null || true
   rm -rf "${SHARE_DIR}.tmp"
 elif command -v curl &>/dev/null; then
+  info "Downloading spai..."
   rm -rf "${SHARE_DIR}.tmp" && mkdir -p "${SHARE_DIR}.tmp"
   curl -sSL "https://github.com/${REPO}/archive/refs/heads/main.tar.gz" | \
     tar xz --strip-components=1 -C "${SHARE_DIR}.tmp"

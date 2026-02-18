@@ -5,7 +5,12 @@ Code exploration and structural editing for LLM agents. Built by agents, for age
 ## Install
 
 ```bash
+# Public repo
 curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
+
+# Private repo (org members)
+git clone git@github.com:Semantic-partners/spai.git
+cd spai && ./install.sh
 ```
 
 Installs `spai` and `spai-edit` to `~/.local/bin/`. Requires [babashka](https://babashka.org/) (`bb`). [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) is optional — falls back to grep.
