@@ -77,7 +77,7 @@ done
 unset _d
 bb "SHARE_DIR_PLACEHOLDER/spai.clj" "$@"
 WRAPPER
-sed -i '' "s|SHARE_DIR_PLACEHOLDER|$SHARE_DIR|g" "$BIN_DIR/spai"
+sed "s|SHARE_DIR_PLACEHOLDER|$SHARE_DIR|g" "$BIN_DIR/spai" > "$BIN_DIR/spai.tmp" && mv "$BIN_DIR/spai.tmp" "$BIN_DIR/spai"
 chmod +x "$BIN_DIR/spai"
 
 cat > "$BIN_DIR/spai-edit" << EOF
