@@ -1,17 +1,19 @@
 #!/usr/bin/env bb
 ;; spai plugin: errors-rust
 ;;
-;; Categorize Rust cargo build errors for large-scale refactoring.
-;; Runs cargo build, caches output, groups by error code/pattern.
+;; Categorize Rust cargo build errors AND warnings for refactoring.
+;; Runs cargo build, caches output, groups by error code and lint name.
 ;;
-;; Usage:  spai errors-rust [package]       # Run build and show summary
-;;         spai errors-rust --detail E0308  # Show specific error details
-;;         spai errors-rust --baseline      # Save current counts
-;;         spai errors-rust --compare       # Compare to baseline
+;; Usage:  spai errors-rust              # Build workspace, show summary
+;;         spai errors-rust -p pkg       # Build one package
+;;         spai errors-rust --detail E0308    # Show specific error details
+;;         spai errors-rust --detail dead_code # Show specific warning lint
+;;         spai errors-rust --baseline   # Save current counts
+;;         spai errors-rust --compare    # Compare to baseline
 
-{:spai/args    "[package|--detail CODE|--baseline|--compare]"
- :spai/returns "EDN map of error categories, counts, patterns, suggestions"
- :spai/example "spai errors-rust spoqe-exec"}
+{:spai/args    "[-p package|--detail CODE|--baseline|--compare|path]"
+ :spai/returns "EDN map of error/warning categories, counts, locations, suggestions"
+ :spai/example "spai errors-rust -p spoqe-exec"}
 
 (require '[clojure.java.io :as io]
          '[clojure.string :as str]
@@ -27,129 +29,218 @@
                    (second (drop-while #(not= "--detail" %) args))))
 (def baseline-mode? (some #{"--baseline"} args))
 (def compare-mode? (some #{"--compare"} args))
-(def package (or (first (remove #(str/starts-with? % "--") args)) "spoqe-exec"))
+(def flag-args #{"--detail" "--baseline" "--compare" "-p"})
+(def flag-values (set (keep (fn [pair]
+                              (when (flag-args (first pair))
+                                (second pair)))
+                            (partition 2 1 args))))
 
-;; Error patterns
+;; Extract -p package if given
+(def package (when (some #{"-p"} args)
+               (second (drop-while #(not= "-p" %) args))))
+
+;; Extract bare path arg (not a flag, not a flag value)
+(def build-path (first (remove #(or (flag-args %)
+                                    (flag-values %)
+                                    (str/starts-with? % "--"))
+                                args)))
+
+;; Warning lint patterns — keyed by the #[warn(name)] lint
+(def warning-patterns
+  {"dead_code"
+   {:name :dead-code
+    :suggestion "Remove unused code or prefix with _ if intentional"}
+
+   "unused_variables"
+   {:name :unused-variable
+    :suggestion "Prefix with _ (e.g., _name) if intentional"}
+
+   "unused_imports"
+   {:name :unused-import
+    :suggestion "Remove the import"}
+
+   "unused_mut"
+   {:name :unused-mut
+    :suggestion "Remove mut or use the variable mutably"}
+
+   "unreachable_code"
+   {:name :unreachable-code
+    :suggestion "Remove unreachable code or fix control flow"}
+
+   "irrefutable_let_patterns"
+   {:name :irrefutable-pattern
+    :suggestion "Replace if let / while let with plain let"}
+
+   "unused_assignments"
+   {:name :unused-assignment
+    :suggestion "Remove the assignment or use the value"}
+
+   "deprecated"
+   {:name :deprecated
+    :suggestion "Migrate to the replacement API"}})
+
+;; Error patterns — keyed by error code
 (def error-patterns
-  [{:code "E0308" :name :type-mismatch
-    :pattern #"mismatched types|expected .*, found .*"
-    :suggestion "Check type conversions, use .into() or explicit casts"}
+  {"E0308" {:name :type-mismatch
+            :suggestion "Check type conversions, use .into() or explicit casts"}
+   "E0425" {:name :unresolved-name
+            :suggestion "Add imports or check module paths"}
+   "E0433" {:name :unresolved-import
+            :suggestion "Verify module exists and is in scope"}
+   "E0599" {:name :no-method
+            :suggestion "Check trait imports, method signatures, or add implementations"}
+   "E0277" {:name :trait-not-implemented
+            :suggestion "Implement required trait or use type that implements it"}
+   "E0061" {:name :wrong-arg-count
+            :suggestion "Check function signature and call site arguments"}
+   "E0609" {:name :no-field
+            :suggestion "Check struct definition or use accessor methods"}
+   "E0560" {:name :unknown-field
+            :suggestion "Check struct definition for correct field names"}
+   "E0412" {:name :unresolved-type
+            :suggestion "Add type import or check definition"}
+   "E0382" {:name :use-after-move
+            :suggestion "Clone value before move or restructure ownership"}})
 
-   {:code "E0425" :name :unresolved-name
-    :pattern #"cannot find|unresolved import"
-    :suggestion "Add imports or check module paths"}
+;; Is this a cargo summary line? (e.g. "warning: `spoqe-core` (lib) generated 2 warnings")
+(defn summary-line? [line]
+  (boolean (re-find #"warning: `[^`]+` \(.+\) generated \d+ warning" line)))
 
-   {:code "E0433" :name :unresolved-import
-    :pattern #"failed to resolve: use of undeclared"
-    :suggestion "Verify module exists and is in scope"}
+;; Does this line start a new diagnostic block?
+(defn diagnostic-start? [line]
+  (and (or (str/starts-with? line "error")
+           (str/starts-with? line "warning:"))
+       (not (summary-line? line))))
 
-   {:code "E0599" :name :no-method
-    :pattern #"no method named|no field|no associated item"
-    :suggestion "Check trait imports, method signatures, or add missing implementations"}
+;; Group consecutive diagnostic lines into blocks
+(defn group-diagnostic-blocks [lines]
+  (->> lines
+       (reduce (fn [acc line]
+                 (cond
+                   ;; Skip summary and "Finished"/"Compiling" lines
+                   (or (summary-line? line)
+                       (str/starts-with? line "    Finished")
+                       (str/starts-with? line "   Compiling"))
+                   acc
 
-   {:code "E0277" :name :trait-not-implemented
-    :pattern #"the trait .* is not implemented"
-    :suggestion "Implement required trait or use type that already implements it"}
+                   ;; New diagnostic block
+                   (diagnostic-start? line)
+                   (conj acc [line])
 
-   {:code "E0061" :name :wrong-arg-count
-    :pattern #"this (?:function|method) takes .* but .* were supplied"
-    :suggestion "Check function signature and call site arguments"}
+                   ;; Continuation of current block
+                   (seq acc)
+                   (update acc (dec (count acc)) conj line)
 
-   {:code "E0609" :name :no-field
-    :pattern #"no field .* on type"
-    :suggestion "Check struct definition or use accessor methods"}
+                   ;; Before any block started
+                   :else acc))
+               [])
+       (filter seq)))
 
-   {:code "E0560" :name :unknown-field
-    :pattern #"struct .* has no field named"
-    :suggestion "Check struct definition for correct field names"}
+;; Extract location from --> line within block
+(defn extract-location [lines]
+  (some (fn [line]
+          (when-let [m (re-find #"-->\s+([\w/.:-]+\.rs:\d+:\d+)" line)]
+            (second m)))
+        lines))
 
-   {:code "E0412" :name :unresolved-type
-    :pattern #"cannot find type .* in this scope"
-    :suggestion "Add type import or check definition"}
+;; Extract lint name from #[warn(...)] note
+(defn extract-lint [lines]
+  (some (fn [line]
+          (second (re-find #"#\[warn\((\w+)\)\]" line)))
+        lines))
 
-   {:code "E0382" :name :use-after-move
-    :pattern #"borrow of moved value|use of moved value"
-    :suggestion "Clone value before move or restructure ownership"}
-
-   {:code "warning" :name :warning
-    :pattern #"^warning:"
-    :suggestion "Consider fixing or allowing with #[allow(...)]"}])
-
-;; Run cargo build if needed
-(defn run-build [pkg]
-  (binding [*out* *err*]
-    (println (str "Building " pkg "...")))
-  (p/shell {:out cache-file :err :out :continue true}
-           "cargo" "build" "-p" pkg)
-  (binding [*out* *err*]
-    (println (str "Build complete. Cached to " cache-file))))
-
-;; Parse a single error/warning
-(defn parse-error [lines]
+;; Parse a single diagnostic block
+(defn parse-diagnostic [lines]
   (let [text (str/join "\n" lines)
-        error-line (first lines)
-        code (when error-line
-               (or (second (re-find #"error\[(\w+)\]" error-line))
-                   (when (str/includes? error-line "warning:") "warning")
-                   "unknown"))
-        matched (first (filter #(re-find (:pattern %) text) error-patterns))
-        location (second (re-find #"([\w/-]+\.rs:\d+:\d+)" error-line))
-        message (second (re-find #"error(?:\[\w+\])?: (.*)" error-line))]
+        first-line (first lines)
+        is-warning? (str/starts-with? first-line "warning:")
+        ;; Error code: error[E0308] -> "E0308"
+        error-code (second (re-find #"error\[(\w+)\]" first-line))
+        ;; Location from --> line
+        location (extract-location lines)
+        ;; Lint from #[warn(lint_name)]
+        lint (extract-lint lines)
+        ;; Message from first line
+        message (cond
+                  error-code
+                  (second (re-find #"error\[\w+\]: (.*)" first-line))
+
+                  (str/starts-with? first-line "error:")
+                  (str/trim (subs first-line 6))
+
+                  is-warning?
+                  (str/trim (subs first-line 8)))
+        ;; Categorize
+        code (cond
+               error-code error-code
+               is-warning? (or lint "warning")
+               :else "unknown")
+        pattern-info (if is-warning?
+                       (get warning-patterns (or lint ""))
+                       (get error-patterns (or error-code "")))]
     {:code code
-     :name (or (:name matched) :other)
+     :kind (if is-warning? :warning :error)
+     :name (or (:name pattern-info) (if is-warning? :warning :other))
+     :lint lint
      :location location
      :message message
-     :suggestion (:suggestion matched)
+     :suggestion (:suggestion pattern-info)
      :raw text}))
 
-;; Group consecutive error lines
-(defn group-error-blocks [lines]
-  (let [error-start? #(or (str/starts-with? % "error")
-                          (str/starts-with? % "warning:"))]
-    (->> lines
-         (reduce (fn [acc line]
-                   (if (error-start? line)
-                     (conj acc [line])
-                     (if (empty? acc)
-                       acc
-                       (update acc (dec (count acc)) conj line))))
-                 [])
-         (filter seq))))
+;; Categorize all diagnostics
+(defn categorize-diagnostics [input-lines]
+  (let [blocks (group-diagnostic-blocks input-lines)
+        diags (map parse-diagnostic blocks)
+        errors (filter #(= :error (:kind %)) diags)
+        warnings (filter #(= :warning (:kind %)) diags)
+        ;; Error summary: by error code
+        error-summary (into (sorted-map)
+                            (map (fn [[code items]]
+                                   [code {:count (count items)
+                                          :name (-> items first :name)
+                                          :locations (vec (keep :location (take 5 items)))
+                                          :suggestion (-> items first :suggestion)
+                                          :examples (vec (keep :message (take 3 items)))}])
+                                 (group-by :code errors)))
+        ;; Warning summary: by lint name
+        warning-summary (into (sorted-map)
+                              (map (fn [[lint items]]
+                                     [lint {:count (count items)
+                                            :name (-> items first :name)
+                                            :locations (vec (keep :location (take 5 items)))
+                                            :suggestion (-> items first :suggestion)
+                                            :examples (vec (keep :message (take 3 items)))}])
+                                   (group-by :code warnings)))]
+    {:errors (count errors)
+     :warnings (count warnings)
+     :by-error error-summary
+     :by-warning warning-summary
+     :all-diagnostics diags}))
 
-;; Categorize all errors
-(defn categorize-errors [input-lines]
-  (let [blocks (group-error-blocks input-lines)
-        errors (map parse-error blocks)
-        by-code (group-by :code errors)
-        by-name (group-by :name errors)
-        totals (into (sorted-map)
-                     (map (fn [[k v]] [k (count v)]) by-code))
-        patterns (into {}
-                       (map (fn [[k v]]
-                              [k {:count (count v)
-                                  :locations (take 5 (map :location v))
-                                  :suggestion (-> v first :suggestion)
-                                  :examples (take 3 (map :message v))}])
-                            by-name))
-        total-errors (count (filter #(not= (:code %) "warning") errors))
-        total-warnings (count (filter #(= (:code %) "warning") errors))]
-    {:total total-errors
-     :warnings total-warnings
-     :by-code totals
-     :by-pattern patterns
-     :all-errors errors}))
+;; Run cargo build
+(defn run-build []
+  (let [cmd (cond-> ["cargo" "build"]
+              package (into ["-p" package]))
+        opts (cond-> {:out cache-file :err :out :continue true}
+               build-path (assoc :dir build-path))]
+    (binding [*out* *err*]
+      (println (str "Building " (or package "workspace")
+                    (when build-path (str " in " build-path)) "...")))
+    (apply p/shell opts cmd)
+    (binding [*out* *err*]
+      (println "Build complete."))))
 
 ;; Main logic
 (cond
-  ;; Detail mode: show specific error type
+  ;; Detail mode: show specific error/warning type
   detail-code
   (if (.exists (io/file cache-file))
     (let [lines (line-seq (io/reader cache-file))
-          result (categorize-errors lines)
-          errors (filter #(= (:code %) detail-code) (:all-errors result))]
+          result (categorize-diagnostics lines)
+          matches (filter #(= (:code %) detail-code) (:all-diagnostics result))]
       (pp/pprint {:code detail-code
-                  :count (count errors)
-                  :errors (take 10 errors)}))
+                  :count (count matches)
+                  :diagnostics (take 10 matches)}))
     (do
       (binding [*out* *err*]
         (println "No cached build. Run without --detail first."))
@@ -158,14 +249,16 @@
   ;; Normal mode: run build and show summary
   :else
   (do
-    (run-build package)
+    (run-build)
     (let [lines (line-seq (io/reader cache-file))
-          result (categorize-errors lines)]
+          result (categorize-diagnostics lines)]
 
       ;; Handle baseline mode
       (when baseline-mode?
-        (spit baseline-file (pr-str {:total (:total result)
-                                            :by-code (:by-code result)}))
+        (spit baseline-file (pr-str {:errors (:errors result)
+                                     :warnings (:warnings result)
+                                     :by-error (:by-error result)
+                                     :by-warning (:by-warning result)}))
         (binding [*out* *err*]
           (println "Baseline saved to" baseline-file)))
 
@@ -174,24 +267,16 @@
         (when compare-mode?
           (if (.exists (io/file baseline-file))
             (let [baseline (read-string (slurp baseline-file))
-                  current (:total result)
-                  baseline-total (:total baseline)
-                  delta (- current baseline-total)
-                  pct (if (zero? baseline-total) 0
-                          (* 100.0 (/ delta baseline-total)))]
-              {:baseline baseline-total
-               :current current
-               :delta delta
-               :percent-change (format "%.1f%%" pct)
-               :by-code-delta (into {}
-                                    (map (fn [[code curr-count]]
-                                           (let [base-count (get (:by-code baseline) code 0)]
-                                             [code {:was base-count
-                                                    :now curr-count
-                                                    :delta (- curr-count base-count)}]))
-                                         (:by-code result)))})
+                  delta-errors (- (:errors result) (:errors baseline 0))
+                  delta-warnings (- (:warnings result) (:warnings baseline 0))]
+              {:baseline-errors (:errors baseline 0)
+               :baseline-warnings (:warnings baseline 0)
+               :current-errors (:errors result)
+               :current-warnings (:warnings result)
+               :delta-errors delta-errors
+               :delta-warnings delta-warnings})
             {:error "No baseline found. Run with --baseline first."})))
 
-      ;; Output EDN (without :all-errors to keep it clean)
-      (pp/pprint (merge (dissoc result :all-errors)
+      ;; Output EDN (without :all-diagnostics to keep it clean)
+      (pp/pprint (merge (dissoc result :all-diagnostics)
                         (when comparison {:comparison comparison}))))))

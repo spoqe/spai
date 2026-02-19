@@ -117,12 +117,14 @@
    ;; === Build (replaces cargo build | grep anti-pattern) ===
 
    {:name "errors_rust"
-    :description "Build Rust project, return structured errors/warnings as EDN. ONE call replaces: cargo build 2>&1 | grep -E '^error' | head -10. Never run cargo build through Bash and grep the output — use this instead. Returns count, locations, suggestions."
+    :description "Build Rust project, return structured errors AND warnings as EDN. Warnings grouped by lint (dead_code, unused_variables, etc.) with locations and suggestions. ONE call replaces: cargo build 2>&1 | grep. Returns counts, locations, suggestions."
     :inputSchema
     {:type "object"
      :properties
      {:path {:type "string"
-             :description "Path to build (optional, defaults to current project)"}}}}
+             :description "Working directory to build in (optional, defaults to current project)"}
+      :package {:type "string"
+                :description "Cargo package to build (optional, builds whole workspace if omitted)"}}}}
 
    ;; === Code exploration (replaces chains of grep/read) ===
 
@@ -251,9 +253,13 @@
       (apply run-spai "supersede" old-id text topic-args))
 
     "errors_rust"
-    (if-let [path (get args "path")]
-      (run-spai "errors-rust" path)
-      (run-spai "errors-rust"))
+    (let [path (get args "path")
+          pkg  (get args "package")]
+      (cond
+        (and path pkg)  (run-spai "errors-rust" path "-p" pkg)
+        path            (run-spai "errors-rust" path)
+        pkg             (run-spai "errors-rust" "-p" pkg)
+        :else           (run-spai "errors-rust")))
 
     "shape"
     (if (get args "full")
