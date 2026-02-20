@@ -46,15 +46,22 @@
                          (map #(assoc % :kind-group :type) (:types raw))
                          (when (:impls raw)
                            (map #(assoc % :kind-group :impl) (:impls raw))))
+              ;; Relativize against cwd if possible, otherwise against the search path
+              cwd      (let [p (System/getProperty "user.dir")] (if (str/ends-with? p "/") p (str p "/")))
+              abs-path (let [p (.getAbsolutePath (io/file path))] (if (str/ends-with? p "/") p (str p "/")))
+              rel      (fn [file] (let [r (relativize cwd file)]
+                                    (if (= r file) (relativize abs-path file) r)))
               by-file  (->> all-defs
                             (group-by :file)
                             (into (sorted-map))
                             (mapv (fn [[file defs]]
-                                    (let [fns   (->> defs (filter #(= :function (:kind-group %))) (mapv :name))
+                                    (let [fns   (->> defs (filter #(= :function (:kind-group %)))
+                                                     (mapv #(select-keys % [:name :line])))
                                           types (->> defs (filter #(= :type (:kind-group %)))
-                                                     (mapv #(select-keys % [:name :kind])))
-                                          impls (->> defs (filter #(= :impl (:kind-group %))) (mapv :name))]
-                                      {:file  (relativize path file)
+                                                     (mapv #(select-keys % [:name :kind :line])))
+                                          impls (->> defs (filter #(= :impl (:kind-group %)))
+                                                     (mapv #(select-keys % [:name :line])))]
+                                      {:file  (rel file)
                                        :functions fns
                                        :types types
                                        :impls impls}))))]
