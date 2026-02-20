@@ -2,13 +2,13 @@
 {:doap/name        "remember"
  :doap/description "Store an insight in persistent KG memory"
  :dc/creator       "Claude"
- :spai/args        "\"text\" [+topic/name ...]"
+ :spai/args        "\"text\" [+topic/name ...] [--session name]"
  :spai/tags        #{:memory :agent}}
 
-;; spai remember "insight text" +spoqe/architecture +spoqe/planning
+;; spai remember "insight text" +spoqe/architecture --session mirror-forge
 ;;
-;; Positional args, no flags. Topics prefixed with +.
-;; Multiple topics supported — each creates a topic association.
+;; Positional args, no flags (except --session). Topics prefixed with +.
+;; --session creates/reuses a named session node and links the insight to it.
 
 (require '[clojure.string :as str]
          '[cheshire.core :as json]
@@ -26,7 +26,8 @@
       (if (= 200 (:status response))
         (json/parse-string (:body response))
         (do
-          (println "Error:" (:status response) (:body response))
+          (binding [*out* *err*]
+            (println "Error:" (:status response) (:body response)))
           nil)))
     (catch Exception e
       (binding [*out* *err*]
@@ -34,41 +35,95 @@
         (println "Start: cd spoqe-memory && ./START-MEMORY.sh"))
       nil)))
 
+(defn find-session-node
+  "Search for existing session node by name. Returns UUID or nil."
+  [session-name]
+  (let [result (query-spoqe (list 'memory/search-insights session-name {:topic :spai/sessions}))]
+    (when-let [insights (get result "results")]
+      (some (fn [insight]
+              (when (str/includes? (str (get insight "text")) (str "Session \"" session-name "\""))
+                (get insight "id")))
+            insights))))
+
+(defn ensure-session-node
+  "Find or create a session node. Returns the session UUID."
+  [session-name]
+  (or (find-session-node session-name)
+      ;; Create session node via batch (returns IDs)
+      (let [today (.toString (java.time.LocalDate/now))
+            session-text (str "Session \"" session-name "\" (" today ")")
+            cmd (list 'memory/remember-batch! [session-text] {:topic :spai/sessions})
+            result (query-spoqe cmd)]
+        (when-let [ids (get result "ids")]
+          (first ids)))))
+
+(defn link-to-session
+  "Link an insight to a session node via skos:broader."
+  [insight-id session-id]
+  (query-spoqe (list 'memory/link! insight-id "skos/broader" session-id)))
+
 (let [args *command-line-args*]
   (when (or (empty? args) (= (first args) "--help"))
-    (println "Usage: spai remember \"insight text\" [+topic/name ...]")
+    (println "Usage: spai remember \"insight text\" [+topic/name ...] [--session name]")
     (println "")
     (println "Examples:")
     (println "  spai remember \"Use spai errors-rust for build checks\"")
     (println "  spai remember \"Planner owns routing\" +spoqe/architecture")
-    (println "  spai remember \"EDN is the AST\" +spoqe/philosophy +spoqe/design")
+    (println "  spai remember \"Built recon plugin\" --session mirror-forge")
     (System/exit (if (empty? args) 1 0)))
 
-  (let [raw-topics (->> args
-                       (filter #(str/starts-with? % "+")))
+  ;; Parse --session
+  (let [session-idx (.indexOf (vec args) "--session")
+        session-name (when (and (>= session-idx 0) (< (inc session-idx) (count args)))
+                       (nth args (inc session-idx)))
+        ;; Remove --session and its value from args
+        clean-args (if session-name
+                     (into [] (concat (subvec (vec args) 0 session-idx)
+                                      (subvec (vec args) (+ session-idx 2))))
+                     (vec args))
+        raw-topics (->> clean-args (filter #(str/starts-with? % "+")))
         bad-topics (filter #(str/includes? % ":") raw-topics)]
     (when (seq bad-topics)
       (println "Error: topics must use / not : as separator")
       (println "  Bad:" (str/join ", " bad-topics))
       (println "  Fix:" (str/join ", " (map #(str/replace % ":" "/") bad-topics)))
-      (System/exit 1)))
-  (let [topics (->> args
-                    (filter #(str/starts-with? % "+"))
-                    (mapv #(keyword (subs % 1))))
-        text (->> args
-                  (remove #(str/starts-with? % "+"))
-                  (str/join " "))
-        opts (when (seq topics)
-               {:topic (first topics)})
-        cmd (if opts
-              (list 'memory/remember! text opts)
-              (list 'memory/remember! text))
-        result (query-spoqe cmd)]
-    (if (get result "status")
-      (do
-        (println "✓ Remembered:" text)
-        (when (seq topics)
-          (println "  topics:" (str/join ", " (map #(str "+" (namespace %) "/" (name %)) topics)))))
-      (do
-        (println "✗ Failed to save insight")
-        (System/exit 1)))))
+      (System/exit 1))
+
+    (let [topics (->> clean-args
+                      (filter #(str/starts-with? % "+"))
+                      (mapv #(keyword (subs % 1))))
+          text (->> clean-args
+                    (remove #(str/starts-with? % "+"))
+                    (str/join " "))
+          ;; Use batch (returns IDs) when session is specified, single otherwise
+          opts (when (seq topics) {:topic (first topics)})]
+      (if session-name
+        ;; Session mode: use batch for ID, then link
+        (let [cmd (if opts
+                    (list 'memory/remember-batch! [text] opts)
+                    (list 'memory/remember-batch! [text]))
+              result (query-spoqe cmd)]
+          (if-let [ids (get result "ids")]
+            (let [insight-id (first ids)
+                  session-id (ensure-session-node session-name)]
+              (println "✓ Remembered:" text)
+              (when (seq topics)
+                (println "  topics:" (str/join ", " (map #(str "+" (namespace %) "/" (name %)) topics))))
+              (if session-id
+                (do (link-to-session insight-id session-id)
+                    (println (str "  session: " session-name " [" session-id "]")))
+                (println "  ⚠ Could not create/find session node")))
+            (do (println "✗ Failed to save insight") (System/exit 1))))
+        ;; Normal mode: single remember
+        (let [cmd (if opts
+                    (list 'memory/remember! text opts)
+                    (list 'memory/remember! text))
+              result (query-spoqe cmd)]
+          (if (get result "status")
+            (do
+              (println "✓ Remembered:" text)
+              (when (seq topics)
+                (println "  topics:" (str/join ", " (map #(str "+" (namespace %) "/" (name %)) topics)))))
+            (do
+              (println "✗ Failed to save insight")
+              (System/exit 1))))))))
