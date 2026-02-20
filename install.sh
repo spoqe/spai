@@ -33,17 +33,23 @@ mkdir -p "$SHARE_DIR" "$SHARE_DIR/plugins" "$BIN_DIR"
 # Detect: are we running from inside a clone?
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+VERSION_HASH="unknown"
+VERSION_ORIGIN=""
+
 if [ -f "$SCRIPT_DIR/spai.clj" ]; then
   info "Installing from local clone ($SCRIPT_DIR)..."
-  # Don't clobber user data (usage.log, plugins, etc.)
-  rsync -a --exclude='usage.log' --exclude='plugins/' --exclude='.git/' \
+  VERSION_HASH="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")"
+  VERSION_ORIGIN="$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null || echo "")"
+  # Don't clobber user data (usage.log)
+  rsync -a --exclude='usage.log' --exclude='.git/' \
     "$SCRIPT_DIR/" "$SHARE_DIR/"
 elif command -v git &>/dev/null; then
   info "Downloading spai..."
   rm -rf "${SHARE_DIR}.tmp"
   git clone --depth 1 "https://github.com/${REPO}.git" "${SHARE_DIR}.tmp" 2>/dev/null
+  VERSION_HASH="$(git -C "${SHARE_DIR}.tmp" rev-parse HEAD 2>/dev/null || echo "unknown")"
+  VERSION_ORIGIN="https://github.com/${REPO}.git"
   rm -f "${SHARE_DIR}.tmp/usage.log" 2>/dev/null
-  rm -rf "${SHARE_DIR}.tmp/plugins" 2>/dev/null
   cp -r "${SHARE_DIR}.tmp"/* "$SHARE_DIR/" 2>/dev/null || true
   rm -rf "${SHARE_DIR}.tmp"
 elif command -v curl &>/dev/null; then
@@ -52,14 +58,19 @@ elif command -v curl &>/dev/null; then
   curl -sSL "https://github.com/${REPO}/archive/refs/heads/main.tar.gz" | \
     tar xz --strip-components=1 -C "${SHARE_DIR}.tmp"
   rm -f "${SHARE_DIR}.tmp/usage.log" 2>/dev/null
-  rm -rf "${SHARE_DIR}.tmp/plugins" 2>/dev/null
   cp -r "${SHARE_DIR}.tmp"/* "$SHARE_DIR/" 2>/dev/null || true
   rm -rf "${SHARE_DIR}.tmp"
+  VERSION_ORIGIN="https://github.com/${REPO}.git"
 else
   fail "Need git or curl to download. Install one and try again."
 fi
 
 chmod +x "$SHARE_DIR"/*.clj 2>/dev/null || true
+
+# Write version for update checking
+cat > "$SHARE_DIR/.version" << VEOF
+{:commit "${VERSION_HASH}" :installed "$(date -u +%Y-%m-%dT%H:%M:%SZ)" :repo "${REPO}" :origin "${VERSION_ORIGIN}"}
+VEOF
 
 # Create bin wrappers
 info "Creating wrappers in $BIN_DIR..."
