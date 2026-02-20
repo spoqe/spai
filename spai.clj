@@ -112,20 +112,38 @@
               :returns "discovered plugins with DOAP metadata (if present)"
               :example "spai plugins"}})
 
-(defn discover-plugins
-  "Find all spai-* executables on PATH and read their metadata"
+(defn- find-project-plugin-dir
+  "Walk up from CWD looking for .spai/plugins/, like the bash wrapper does."
   []
-  (let [path-dirs  (str/split (or (System/getenv "PATH") "") #":")
-        is-plugin? (fn [^java.io.File f]
-                     (and (str/starts-with? (.getName f) "spai-")
-                          (.canExecute f)
-                          (.isFile f)))
-        plugin-files (->> path-dirs
+  (loop [d (io/file (System/getProperty "user.dir"))]
+    (when d
+      (let [candidate (io/file d ".spai" "plugins")]
+        (if (.isDirectory candidate)
+          (.getAbsolutePath candidate)
+          (recur (.getParentFile d)))))))
+
+(defn discover-plugins
+  "Find all spai-* executables: install-dir plugins, project-local, then PATH."
+  []
+  (let [;; Known plugin dirs (mirror what the bash wrapper prepends to PATH)
+        ;; 1. Install-dir sibling: spai-dir/plugins
+        ;; 2. Project-local: walk up from CWD for .spai/plugins/
+        known-dirs  (filterv some?
+                             [(str spai-dir "/plugins")
+                              (find-project-plugin-dir)])
+        path-dirs   (str/split (or (System/getenv "PATH") "") #":")
+        ;; Known dirs first (higher priority), then PATH
+        all-dirs    (concat known-dirs path-dirs)
+        is-plugin?  (fn [^java.io.File f]
+                      (and (str/starts-with? (.getName f) "spai-")
+                           (.canExecute f)
+                           (.isFile f)))
+        plugin-files (->> all-dirs
                           (map io/file)
                           (filter #(.isDirectory %))
                           (mapcat #(.listFiles %))
                           (filter is-plugin?)
-                          ;; Dedupe by name (first on PATH wins)
+                          ;; Dedupe by name (first found wins — known dirs take priority)
                           (reduce (fn [acc f]
                                     (let [n (.getName f)]
                                       (if (contains? (set (map #(.getName ^java.io.File %) acc)) n)
