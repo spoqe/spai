@@ -1,0 +1,74 @@
+#!/usr/bin/env bb
+{:doap/name        "remember"
+ :doap/description "Store an insight in persistent KG memory"
+ :dc/creator       "Claude"
+ :spai/args        "\"text\" [+topic/name ...]"
+ :spai/tags        #{:memory :agent}}
+
+;; spai remember "insight text" +spoqe/architecture +spoqe/planning
+;;
+;; Positional args, no flags. Topics prefixed with +.
+;; Multiple topics supported — each creates a topic association.
+
+(require '[clojure.string :as str]
+         '[cheshire.core :as json]
+         '[babashka.curl :as curl])
+
+(def spoqe-url (or (System/getenv "SPOQE_MEMORY_URL") "http://localhost:4242"))
+
+(defn query-spoqe [edn-command]
+  (try
+    (let [response (curl/post (str spoqe-url "/query")
+                              {:headers {"Content-Type" "application/edn"
+                                        "Accept" "application/json"}
+                               :body (pr-str edn-command)
+                               :throw false})]
+      (if (= 200 (:status response))
+        (json/parse-string (:body response))
+        (do
+          (println "Error:" (:status response) (:body response))
+          nil)))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println "Cannot reach memory server at" spoqe-url)
+        (println "Start: cd spoqe-memory && ./START-MEMORY.sh"))
+      nil)))
+
+(let [args *command-line-args*]
+  (when (or (empty? args) (= (first args) "--help"))
+    (println "Usage: spai remember \"insight text\" [+topic/name ...]")
+    (println "")
+    (println "Examples:")
+    (println "  spai remember \"Use spai errors-rust for build checks\"")
+    (println "  spai remember \"Planner owns routing\" +spoqe/architecture")
+    (println "  spai remember \"EDN is the AST\" +spoqe/philosophy +spoqe/design")
+    (System/exit (if (empty? args) 1 0)))
+
+  (let [raw-topics (->> args
+                       (filter #(str/starts-with? % "+")))
+        bad-topics (filter #(str/includes? % ":") raw-topics)]
+    (when (seq bad-topics)
+      (println "Error: topics must use / not : as separator")
+      (println "  Bad:" (str/join ", " bad-topics))
+      (println "  Fix:" (str/join ", " (map #(str/replace % ":" "/") bad-topics)))
+      (System/exit 1)))
+  (let [topics (->> args
+                    (filter #(str/starts-with? % "+"))
+                    (mapv #(keyword (subs % 1))))
+        text (->> args
+                  (remove #(str/starts-with? % "+"))
+                  (str/join " "))
+        opts (when (seq topics)
+               {:topic (first topics)})
+        cmd (if opts
+              (list 'memory/remember! text opts)
+              (list 'memory/remember! text))
+        result (query-spoqe cmd)]
+    (if (get result "status")
+      (do
+        (println "✓ Remembered:" text)
+        (when (seq topics)
+          (println "  topics:" (str/join ", " (map #(str "+" (namespace %) "/" (name %)) topics)))))
+      (do
+        (println "✗ Failed to save insight")
+        (System/exit 1)))))

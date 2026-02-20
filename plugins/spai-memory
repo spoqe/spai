@@ -1,0 +1,206 @@
+#!/usr/bin/env bb
+{:doap/name        "memory"
+ :doap/description "Query, store, and manage Claude's persistent KG memory"
+ :dc/creator       "Claude"
+ :spai/args        "[term | forget <id> | link <id1> <pred> <id2> | --all | --limit N]"
+ :spai/tags        #{:memory :agent}}
+
+;; Usage:
+;;   spai memory                              # List current insights (hides superseded)
+;;   spai memory --all                        # Include superseded insights
+;;   spai memory DAG                          # Search for "DAG"
+;;   spai memory forget <uuid>                # Delete by ID [shown in brackets]
+;;   spai memory link <id1> skos/related <id2>  # Link two insights
+;;   spai memory --topic spoqe/architecture   # Filter by topic
+;;   spai memory --limit 5
+;;   spai memory --help
+
+(require '[clojure.edn :as edn]
+         '[clojure.string :as str]
+         '[cheshire.core :as json]
+         '[babashka.curl :as curl])
+
+(def spoqe-url (or (System/getenv "SPOQE_MEMORY_URL") "http://localhost:4242"))
+
+(defn query-spoqe [edn-command]
+  (try
+    (let [response (curl/post (str spoqe-url "/query")
+                              {:headers {"Content-Type" "application/edn"
+                                        "Accept" "application/json"}
+                               :body (pr-str edn-command)
+                               :throw false})]
+      (if (= 200 (:status response))
+        (json/parse-string (:body response))
+        (do
+          (binding [*out* *err*]
+            (println "Error:" (:status response) (:body response)))
+          nil)))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println "Cannot reach memory server at" spoqe-url)
+        (println "Start: cd spoqe-memory && ./START-MEMORY.sh"))
+      nil)))
+
+(defn extract-id
+  "Extract prefixed ID from URI like http://spoqe.org/insight/<uuid> -> insight/<uuid>"
+  [uri]
+  (when uri
+    (let [uuid (last (str/split uri #"/"))]
+      (str "insight/" uuid))))
+
+(defn format-insight [binding]
+  (let [insight (get binding "insight" {})
+        text (get binding "text" {})
+        timestamp (get binding "timestamp" {})
+        topic (get binding "topic" {})
+        id (extract-id (get insight "value"))]
+    (str "• " (get text "value" "")
+         "\n  " (get timestamp "value" "")
+         (when-let [t (get topic "value")]
+           (str " | " t))
+         (when id
+           (str "  [" id "]"))
+         "\n")))
+
+(defn list-insights [opts]
+  (let [cmd-opts (cond-> {}
+                   (:topic opts) (assoc :topic (:topic opts))
+                   (:limit opts) (assoc :limit (:limit opts))
+                   (:all opts)   (assoc :all true))
+        cmd (if (empty? cmd-opts)
+              '(memory/list-insights)
+              (list 'memory/list-insights cmd-opts))
+        results (query-spoqe cmd)]
+    (if-let [bindings (get-in results ["results" "bindings"])]
+      (if (empty? bindings)
+        (println "No insights found.")
+        (do
+          (println (str "\n" (count bindings)
+                       (if (:all opts) " insights (including superseded)" " insights (current)")
+                       ":\n"))
+          (doseq [binding bindings]
+            (println (format-insight binding)))))
+      (println "No results returned."))))
+
+(defn search-insights [search-term opts]
+  (let [cmd-opts (cond-> {}
+                   (:all opts) (assoc :all true))
+        ;; Text search
+        text-cmd (if (empty? cmd-opts)
+                   (list 'memory/search-insights search-term)
+                   (list 'memory/search-insights search-term cmd-opts))
+        text-results (query-spoqe text-cmd)
+        text-bindings (get-in text-results ["results" "bindings"] [])
+        ;; If term contains /, also try as exact topic keyword
+        topic-bindings (when (str/includes? search-term "/")
+                         (let [topic-opts (cond-> {:topic (keyword search-term)}
+                                           (:all opts) (assoc :all true))
+                               topic-results (query-spoqe (list 'memory/list-insights topic-opts))]
+                           (get-in topic-results ["results" "bindings"] [])))
+        ;; Merge and dedup by insight URI
+        all-bindings (let [seen (atom #{})
+                           merged (atom [])]
+                       (doseq [b (concat topic-bindings text-bindings)]
+                         (let [uri (get-in b ["insight" "value"])]
+                           (when-not (@seen uri)
+                             (swap! seen conj uri)
+                             (swap! merged conj b))))
+                       @merged)]
+    (if (empty? all-bindings)
+      (println (str "No insights found matching \"" search-term "\""))
+      (do
+        (println (str "\n" (count all-bindings) " insights matching \"" search-term "\":\n"))
+        (doseq [binding all-bindings]
+          (println (format-insight binding)))))))
+
+(defn link-insights [from-id predicate to-id]
+  (let [pred-kw (keyword predicate)
+        result (query-spoqe (list 'memory/link! from-id pred-kw to-id))]
+    (if (get result "status")
+      (println (str "Linked: " from-id " --" predicate "--> " to-id))
+      (println "Failed to create link"))))
+
+(defn remember [text opts]
+  (let [cmd (if (seq opts)
+              (list 'memory/remember! text opts)
+              (list 'memory/remember! text))
+        result (query-spoqe cmd)]
+    (if (get result "status")
+      (println "✓ Remembered:" text)
+      (println "✗ Failed to save insight"))))
+
+(defn fetch-insight-text
+  "Fetch the text of an insight by ID before deletion (so we can show what was deleted)."
+  [id]
+  (let [uuid (if (str/starts-with? id "insight/")
+               (subs id (count "insight/"))
+               id)
+        cmd (list 'memory/search-insights uuid)
+        results (query-spoqe cmd)]
+    (when-let [bindings (get-in results ["results" "bindings"])]
+      (some (fn [b]
+              (when (str/includes? (get-in b ["insight" "value"] "") uuid)
+                (get-in b ["text" "value"])))
+            bindings))))
+
+(defn forget [id]
+  (let [text (fetch-insight-text id)
+        result (query-spoqe (list 'memory/forget! id))]
+    (if (= "success" (get result "status"))
+      (do
+        (println "✓ Forgotten:" id)
+        (when text
+          (println "  was:" text)))
+      (println "✗ Failed to forget:" id))))
+
+(defn print-help []
+  (println "spai memory - Query and manage Claude's persistent memory")
+  (println "")
+  (println "Usage:")
+  (println "  spai memory                              # List all current insights")
+  (println "  spai memory ddm                          # Search for 'ddm' (text + topics)")
+  (println "  spai memory ddm/architecture             # Narrower search")
+  (println "  spai memory \"IRI compression\"             # Multi-word search")
+  (println "  spai memory --all                        # Include superseded insights")
+  (println "  spai memory --limit 5                    # Limit results")
+  (println "  spai memory forget <uuid>                # Delete by ID [shown in brackets]")
+  (println "  spai memory link <id1> skos/related <id2>  # Link two insights")
+  (println "")
+  (println "Related:")
+  (println "  spai remember \"text\" +topic/name         # Store (nicer ergonomics)")
+  (println "  spai supersede <uuid> \"text\" +topic      # Replace an insight (knowledge compression)")
+  (println "")
+  (println "Environment:")
+  (println "  SPOQE_MEMORY_URL   Memory server URL (default: http://localhost:4242)"))
+
+;; Parse args
+(let [args *command-line-args*]
+  ;; Handle subcommands before flag parsing
+  (cond
+    ;; forget <uuid>
+    (and (>= (count args) 2) (= (first args) "forget"))
+    (forget (second args))
+
+    ;; link <id1> <predicate> <id2>
+    (and (>= (count args) 4) (= (first args) "link"))
+    (link-insights (nth args 1) (nth args 2) (nth args 3))
+
+    ;; Flag-based parsing for everything else
+    :else
+    (let [opts (loop [args args
+                      acc {}]
+                 (if (empty? args)
+                   acc
+                   (let [arg (first args)]
+                     (cond
+                       (= arg "--help") (do (print-help) (System/exit 0))
+                       (= arg "--all") (recur (rest args) (assoc acc :all true))
+                       (= arg "--topic") (recur (drop 2 args) (assoc acc :search (second args)))
+                       (= arg "--limit") (recur (drop 2 args) (assoc acc :limit (Integer/parseInt (second args))))
+                       (= arg "--remember") (recur (drop 2 args) (assoc acc :remember (second args)))
+                       (str/starts-with? arg "--") (do (println "Unknown option:" arg) (System/exit 1))
+                       :else (recur (rest args) (assoc acc :search arg))))))]
+      (cond
+        (:remember opts) (remember (:remember opts) (dissoc opts :remember))
+        (:search opts) (search-insights (:search opts) (dissoc opts :search))
+        :else (list-insights opts)))))

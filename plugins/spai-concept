@@ -1,0 +1,126 @@
+#!/usr/bin/env bb
+{:doap/name        "concept"
+ :doap/description "Create a skos:Concept in the memory graph"
+ :dc/creator       "Claude"
+ :spai/args        ":project/name \"Label\" \"Description\" [--broader :project/parent] [--related :project/other]"
+ :spai/tags        #{:memory :agent}}
+
+;; spai concept :project/spoqe "SPOQE" "Federated semantic query engine"
+;; spai concept :project/clorust "Clorust" "Lisp interpreter" --broader :project/spoqe
+;; spai concept :project/ddm "DDM" "Data Dependency Matrix" --related :project/spoqe
+;;
+;; Creates a skos:Concept via (record! ...) through SPOQE memory instance.
+;; Portable — goes through the SPOQE write path, not raw Fuseki.
+
+(require '[clojure.string :as str]
+         '[cheshire.core :as json]
+         '[babashka.curl :as curl])
+
+(def spoqe-url (or (System/getenv "SPOQE_MEMORY_URL") "http://localhost:4242"))
+
+;; Custom prefix map — expand to full IRIs for namespaces not in SPOQE's built-in set.
+;; Built-in: rdf, rdfs, skos, dc, foaf, schema, ex, org, xsd, owl
+(def custom-prefixes
+  {"project" "http://spoqe.dev/project/"
+   "spoqe"   "http://spoqe.dev/ontology#"})
+
+(defn expand-keyword
+  "Expand a keyword to full IRI string if its namespace is in custom-prefixes.
+   Built-in prefixes (skos, dc, rdf, etc.) pass through as keywords."
+  [kw]
+  (if-let [base (get custom-prefixes (namespace kw))]
+    (str base (name kw))
+    kw))
+
+(defn expand-as-iri
+  "Like expand-keyword, but wraps custom-prefix expansions in #iri tag
+   so record! stores them as URI references, not literal strings."
+  [kw]
+  (if-let [base (get custom-prefixes (namespace kw))]
+    (tagged-literal 'iri (str base (name kw)))
+    kw))
+
+(defn query-spoqe [edn-command]
+  (try
+    (let [response (curl/post (str spoqe-url "/query")
+                              {:headers {"Content-Type" "application/edn"
+                                        "Accept" "application/json"}
+                               :body (pr-str edn-command)
+                               :throw false})]
+      (if (= 200 (:status response))
+        (json/parse-string (:body response))
+        (do
+          (println "Error:" (:status response) (:body response))
+          nil)))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println "Cannot reach memory server at" spoqe-url)
+        (println "Start: cd spoqe-memory && ./START-MEMORY.sh"))
+      nil)))
+
+(defn parse-keyword [s]
+  (when (str/starts-with? s ":")
+    (let [rest (subs s 1)
+          slash-idx (str/index-of rest "/")]
+      (if slash-idx
+        (keyword (subs rest 0 slash-idx) (subs rest (inc slash-idx)))
+        (keyword rest)))))
+
+(let [args *command-line-args*]
+  (when (or (empty? args) (= (first args) "--help"))
+    (println "Usage: spai concept :ns/name \"Label\" \"Description\" [--broader :ns/parent] [--related :ns/other]")
+    (println "")
+    (println "Creates a skos:Concept in the memory graph via SPOQE.")
+    (println "")
+    (println "Examples:")
+    (println "  spai concept :project/spoqe \"SPOQE\" \"Federated semantic query engine\"")
+    (println "  spai concept :project/clorust \"Clorust\" \"Lisp interpreter\" --broader :project/spoqe")
+    (println "  spai concept :project/ddm \"DDM\" \"Data Dependency Matrix\" --related :project/spoqe")
+    (System/exit (if (empty? args) 1 0)))
+
+  (let [iri (parse-keyword (first args))
+        label (second args)
+        description (nth args 2 nil)]
+
+    (when-not iri
+      (println "Error: first argument must be a keyword like :project/spoqe")
+      (System/exit 1))
+    (when-not label
+      (println "Error: second argument must be the label (string)")
+      (System/exit 1))
+    (when-not description
+      (println "Error: third argument must be the description (string)")
+      (System/exit 1))
+
+    (let [rest-args (drop 3 args)
+          pairs (partition 2 rest-args)
+          broader (keep (fn [[flag val]] (when (= flag "--broader") (parse-keyword val))) pairs)
+          related (keep (fn [[flag val]] (when (= flag "--related") (parse-keyword val))) pairs)
+
+          ;; Expand custom prefixes to full IRIs
+          iri-expanded (expand-keyword iri)
+
+          ;; Build triples — expand any custom-prefixed keywords to full IRIs
+          ;; Use expand-as-iri for object positions that should be URI references
+          triples (vec (concat
+                        [[iri-expanded :rdf/type :skos/Concept]
+                         [iri-expanded :skos/prefLabel label]
+                         [iri-expanded :dc/description description]]
+                        (map (fn [b] [iri-expanded :skos/broader (expand-as-iri b)]) broader)
+                        (map (fn [r] [iri-expanded :skos/related (expand-as-iri r)]) related)))
+
+          cmd (list 'record! triples)]
+
+      (let [result (query-spoqe cmd)]
+        (if result
+          (do
+            (println (str "✓ Created concept " iri))
+            (println (str "  label: " label))
+            (println (str "  description: " description))
+            (when (seq broader)
+              (println (str "  broader: " (str/join ", " broader))))
+            (when (seq related)
+              (println (str "  related: " (str/join ", " related)))))
+          (do
+            (println "✗ Failed to create concept")
+            (System/exit 1)))))))
