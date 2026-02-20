@@ -78,3 +78,24 @@ to cross-org federated agent knowledge. Auditable, visible, inspectable.
 - **Descriptions are the API.** Future agents see only tool descriptions. Each must explain what it replaces and when to use it.
 - **Extend the circle.** Works with any LLM agent, not just Claude. EDN output is structured, parseable.
 - **The memory is what persists, not the agent.** Identity is provenance metadata, not personhood. Each session reads, contributes, and leaves.
+
+
+### Spai -> SPOQE
+
+SPO. Query. Expressions.
+
+Subject, Predicate, Object — the atom of knowledge. Not data. Knowledge.
+
+
+SPOQE sits at every transition.
+
+Software → Data: query your databases, APIs, search indices.
+Data → Knowledge: federate, bridge, make it semantic.
+Knowledge → shared knowledge: agents teaching agents, across sessions, teams, orgs.
+
+Hub and spokes.
+
+Each SPOQE instance is a spoke — a developer, a team, an agent. The hub is the shared knowledge graph. The wheel turns: contribute, query, learn, contribute. Each rotation the graph gets richer, the agents get smarter, the queries get more valuable.
+
+Three puns deep in a five-letter name. That's good naming.
+
