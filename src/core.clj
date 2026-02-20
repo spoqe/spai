@@ -51,7 +51,7 @@
   [pattern path & extra-args]
   (if @has-rg?
     ;; rg: faster, respects .gitignore, structured JSON output
-    (let [args (vec (concat ["rg" "--json" "--no-heading" "--no-ignore"]
+    (let [args (vec (concat ["rg" "--json" "--no-heading"]
                             (remove nil? extra-args)
                             [pattern path]))
           {:keys [exit out]} (apply p/shell {:out :string :err :string :continue true} args)]
@@ -97,7 +97,12 @@
    :go
    {:functions "^func\\s+(\\(\\w+\\s+\\*?\\w+\\)\\s+)?\\w+"
     :types     "^type\\s+\\w+\\s+(struct|interface)"
-    :imports   "^import\\s+"}})
+    :imports   "^import\\s+"}
+
+   :php
+   {:functions "^\\s*(public|protected|private)?\\s*(static\\s+)?function\\s+\\w+"
+    :types     "^\\s*(abstract\\s+|final\\s+)?(class|interface|trait|enum)\\s+\\w+"
+    :imports   "^\\s*(use|require|require_once|include|include_once)\\s+"}})
 
 (defn- detect-lang
   "Detect primary language from file extensions in path."
@@ -114,6 +119,7 @@
               (str/ends-with? name ".bb"))                      :clojure
           (str/ends-with? name ".py")                           :python
           (str/ends-with? name ".go")                           :go
+          (str/ends-with? name ".php")                          :php
           :else                                                 :rust))
       ;; Directory - sample first 100 files
       (let [files (->> (file-seq f)
@@ -128,6 +134,7 @@
                      (str/ends-with? % ".cljs")) files)         :clojure
           (some #(str/ends-with? % ".py") files)                :python
           (some #(str/ends-with? % ".go") files)                :go
+          (some #(str/ends-with? % ".php") files)              :php
           :else                                                 :rust)))))
 
 ;; -------------------------------------------------------------------
@@ -142,6 +149,7 @@
     :clojure    (second (re-find #"\(defn-?\s+(\S+)" text))
     :python     (second (re-find #"def\s+(\w+)" text))
     :go         (second (re-find #"func\s+(?:\([^)]+\)\s+)?(\w+)" text))
+    :php        (second (re-find #"function\s+(\w+)" text))
     nil))
 
 (defn- extract-type-name [text]
@@ -174,4 +182,4 @@
 
 (def ^:private source-exts
   "Source file extensions we care about."
-  #"\.(rs|ts|tsx|js|jsx|py|go|clj|cljs|java|rb)$")
+  #"\.(rs|ts|tsx|js|jsx|py|go|clj|cljs|java|rb|php)$")

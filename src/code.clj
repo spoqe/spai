@@ -67,10 +67,11 @@
   [symbol path]
   (let [path    (or path ".")
         type-args (if @has-rg?
-                    ["-g" "*.{rs,clj,cljs,ts,tsx,py,go,edn,toml,md}"]
+                    ["-g" "*.{rs,clj,cljs,ts,tsx,py,go,php,edn,toml,md}"]
                     ["--include=*.rs" "--include=*.clj" "--include=*.ts"
                      "--include=*.tsx" "--include=*.py" "--include=*.go"
-                     "--include=*.edn" "--include=*.toml" "--include=*.md"])
+                     "--include=*.php" "--include=*.edn" "--include=*.toml"
+                     "--include=*.md"])
         matches (or (apply grepf symbol path "-w" type-args)
                     [])]
     {:symbol  symbol
@@ -107,7 +108,8 @@
    :typescript #"^\s*(export\s+)?(default\s+)?(async\s+)?(function|class|interface|type|enum|const|let)\s+"
    :clojure    #"\((defn?-?|defrecord|deftype|defprotocol|defmulti|defmethod|def)\s+"
    :python     #"^\s*(async\s+)?(def|class)\s+"
-   :go         #"^(func|type|var|const)\s+"})
+   :go         #"^(func|type|var|const)\s+"
+   :php        #"^\s*(public|protected|private)?\s*(static\s+)?(function|class|interface|trait|enum|abstract\s+class|final\s+class)\s+"})
 
 (defn definition
   "Find where a symbol is defined. Filters usages to definition-site patterns."
@@ -150,7 +152,9 @@
    :typescript {:pattern "^import\\s+" :extract #"from\s+['\"]([^'\"]+)['\"]"}
    :clojure    {:pattern "\\(:?require\\s+" :extract #"\[([^\s\]]+)"}
    :python     {:pattern "^(import|from)\\s+" :extract #"(?:from|import)\s+(\S+)"}
-   :go         {:pattern "^import\\s+" :extract #"\"([^\"]+)\""}})
+   :go         {:pattern "^import\\s+" :extract #"\"([^\"]+)\""}
+   :php        {:pattern "^\\s*(use|require|require_once|include|include_once)\\s+"
+                :extract #"(?:use|require|require_once|include|include_once)\s+(\S+)"}})
 
 (defn who
   "Reverse file dependencies. Who imports/uses this file?
@@ -270,7 +274,31 @@
                      (re-find #"^import\s+" text)
                      (when-let [[_ mod-name] (re-find #"^import\s+(\S+)" text)]
                        {:module (str/replace mod-name #",$" "")
-                        :line (:line h) :kind :import}))))))))
+                        :line (:line h) :kind :import})))))))) 
+
+ (defn- extract-php-imports
+  "Extract use/require/include statements from a PHP file.
+   Handles: use Namespace\\Class, require/include with file paths."
+  [file-path]
+  (let [hits (or (grepf "^\\s*(use|require|require_once|include|include_once)\\s+" file-path) [])]
+    (->> hits
+         (keep (fn [h]
+                 (let [text (:text h)]
+                   (cond
+                     ;; use App\Models\User;  or  use App\Models\User as Alias;
+                     (re-find #"^\s*use\s+" text)
+                     (when-let [[_ ns-path] (re-find #"use\s+([\w\\]+)" text)]
+                       {:module (str/replace ns-path "\\" "/")
+                        :raw    ns-path
+                        :line   (:line h)
+                        :kind   :use})
+
+                     ;; require/require_once/include/include_once
+                     (re-find #"^\s*(require|require_once|include|include_once)" text)
+                     (when-let [[_ _ path] (re-find #"(require|require_once|include|include_once)\s+['\x22]([^'\x22]+)['\x22]" text)]
+                       {:module path
+                        :line   (:line h)
+                        :kind   :require}))))))))
 
 (defn- find-python-root
   "Find the Python project root. Walks up looking for pyproject.toml, setup.py, etc."
@@ -281,6 +309,16 @@
       (if (or (.exists (io/file dir "pyproject.toml"))
               (.exists (io/file dir "setup.py"))
               (.exists (io/file dir "setup.cfg")))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir)))))) 
+
+ (defn- find-php-root
+  "Find the PHP project root. Walks up looking for composer.json."
+  [start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (.exists (io/file dir "composer.json"))
         (.getCanonicalPath dir)
         (recur (.getParentFile dir))))))
 
@@ -320,7 +358,35 @@
                        (str project-root "/src")
                        (str project-root "/lib")]
                       [cur-dir])]
-        (some #(try-file % as-path) roots)))))
+        (some #(try-file % as-path) roots))))) 
+
+ (defn- resolve-php-module
+  "Try to resolve a PHP namespace to a project file via PSR-4 convention.
+   Namespace\\Class maps to Namespace/Class.php relative to project root."
+  [mod-str current-file project-root]
+  (let [cur-dir  (.getParent (io/file current-file))
+        ;; Convert namespace separators to path: App\\Models\\User -> App/Models/User
+        as-path  (str/replace mod-str "\\" "/")
+        try-file (fn [base path]
+                   (when base
+                     (let [f (io/file (str base "/" path ".php"))]
+                       (when (.exists f) (.getCanonicalPath f)))))]
+    (cond
+      ;; Relative path (require/include): try from current dir
+      (or (str/starts-with? mod-str "./")
+          (str/starts-with? mod-str "../")
+          (str/ends-with? mod-str ".php"))
+      (let [f (io/file cur-dir mod-str)]
+        (when (.exists f) (.getCanonicalPath f)))
+
+      ;; Namespace (use statement): try PSR-4 resolution from project root
+      :else
+      (when project-root
+        (or (try-file project-root as-path)
+            ;; Common PSR-4 prefixes: src/, lib/, app/
+            (try-file (str project-root "/src") as-path)
+            (try-file (str project-root "/lib") as-path)
+            (try-file (str project-root "/app") as-path))))))
 
 (defn- extract-generic-imports
   "Extract imports using the generic import-patterns config."
@@ -386,6 +452,7 @@
                   :local :external)
     :typescript (if (str/starts-with? mod-str ".") :local :external)
     :python     (if (str/starts-with? mod-str ".") :local :probe)
+    :php        :probe
     :clojure    :unknown
     :go         :unknown
     :unknown))
@@ -414,6 +481,9 @@
             ;; For Python: find project root for resolving absolute imports
             py-root  (when (= lang :python)
                        (find-python-root (or (first files) path)))
+            ;; For PHP: find project root for PSR-4 resolution
+            php-root (when (= lang :php)
+                       (find-php-root (or (first files) path)))
             ;; Use git root or crate root for relativizing paths
             target-dir (if (.isFile f) (.getParent f) (.getCanonicalPath f))
             git-root (try (str/trim (:out @(p/process ["git" "rev-parse" "--show-toplevel"]
@@ -434,6 +504,7 @@
                                             :rust       (extract-rust-imports file-path)
                                             :typescript (extract-ts-imports file-path)
                                             :python     (extract-python-imports file-path)
+                                            :php        (extract-php-imports file-path)
                                             (extract-generic-imports file-path lang))
                                ;; Collect mod names so bare imports can match them
                                mod-names  (when (= lang :rust)
@@ -467,8 +538,9 @@
                                                                 :typescript (when (= cls :local)
                                                                               (resolve-ts-module module file-path))
                                                                 :python (resolve-python-module module file-path py-root)
+                                                                :php    (resolve-php-module module file-path php-root)
                                                                 nil)
-                                                     ;; For Python :probe — resolution determines local vs external
+                                                     ;; For Python/PHP :probe — resolution determines local vs external
                                                      final-cls (if (= cls :probe)
                                                                  (if resolved :local :external)
                                                                  cls)]
