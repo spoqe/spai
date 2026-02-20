@@ -29,7 +29,16 @@
    Discovers implicit coupling that the module system doesn't show.
    The hidden graph — gears that mesh."
   [file & {:keys [n min-pct] :or {n 200 min-pct 10}}]
-  (let [raw (sh "git" "log" (str "-" n) "--pretty=format:%H" "--" file)]
+  (let [;; Normalize: if absolute path, also compute the relative form for matching
+        file-basename (.getName (io/file file))
+        file-suffix   (when (str/starts-with? file "/")
+                        ;; git diff-tree returns repo-relative paths, so strip to match
+                        (let [git-root (str/trim (or (sh "git" "rev-parse" "--show-toplevel") ""))]
+                          (when (and (seq git-root) (str/starts-with? file git-root))
+                            (subs file (inc (count git-root))))))
+        self?         (fn [f] (or (= f file) (= f file-suffix)
+                                  (and file-suffix (str/ends-with? f file-suffix))))
+        raw           (sh "git" "log" (str "-" n) "--pretty=format:%H" "--" file)]
     (if-not raw
       {:file file :error "No git history found for this file"}
       (let [commits    (->> (str/split-lines raw)
@@ -42,7 +51,7 @@
                                                                "-r" "--name-only" hash)]
                                         (let [files (->> (str/split-lines files-raw)
                                                          (remove str/blank?)
-                                                         (remove #{file}))]
+                                                         (remove self?))]
                                           files))))
                             frequencies)
             ranked     (->> co-changes
