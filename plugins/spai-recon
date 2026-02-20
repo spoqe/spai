@@ -1,0 +1,107 @@
+#!/usr/bin/env bb
+;; spai plugin: recon
+;;
+;; Full situational awareness before touching a symbol or file.
+;; Runs blast + shape + who + memory in parallel, merges results.
+;;
+;; Usage:  spai recon <symbol>           # recon a function/type name
+;;         spai recon <file>             # recon a file
+;;         spai recon <symbol> <path>    # scope search to path
+
+{:spai/args    "<symbol-or-file> [path]"
+ :spai/returns "EDN map: blast radius, module shape, reverse deps, memory insights"
+ :spai/example "spai recon try_lisp_plan"}
+
+(require '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[clojure.edn :as edn]
+         '[clojure.pprint :as pp]
+         '[babashka.process :as p])
+
+(def args *command-line-args*)
+(def target (first args))
+(def scope-path (or (second args) "."))
+
+(when (or (nil? target) (contains? #{"--help" "-h"} target))
+  (println "Usage: spai recon <symbol-or-file> [path]")
+  (println)
+  (println "  symbol  → blast radius, shape of containing module, reverse deps, memory")
+  (println "  file    → shape of directory, reverse deps, memory, co-change history")
+  (println)
+  (println "Examples:")
+  (println "  spai recon try_lisp_plan")
+  (println "  spai recon interp.rs")
+  (println "  spai recon execute_clorust_eval spoqe-exec/")
+  (System/exit 0))
+
+;; Is the target a file path?
+(def file-mode? (or (str/ends-with? target ".rs")
+                    (str/ends-with? target ".clj")
+                    (str/ends-with? target ".edn")
+                    (str/ends-with? target ".spq")
+                    (str/ends-with? target ".toml")
+                    (str/includes? target "/")))
+
+(defn sh-edn
+  "Run a command, parse stdout as EDN. Returns nil on failure."
+  [& cmd]
+  (let [{:keys [exit out]} (apply p/shell {:out :string :err :string :continue true} cmd)]
+    (when (zero? exit)
+      (try
+        (edn/read-string (str/trim out))
+        (catch Exception _
+          ;; Not EDN — return raw string
+          (str/trim out))))))
+
+(defn sh-lines
+  "Run a command, return stdout lines. Returns [] on failure."
+  [& cmd]
+  (let [{:keys [exit out]} (apply p/shell {:out :string :err :string :continue true} cmd)]
+    (if (zero? exit)
+      (str/split-lines (str/trim out))
+      [])))
+
+;; Run all queries in parallel
+(binding [*out* *err*]
+  (println (str "Recon: " target (when (not= scope-path ".") (str " in " scope-path)) "...")))
+
+(def results
+  (let [;; Always run memory search
+        memory-f   (future (sh-edn "spai" "memory" target))
+        ;; Branch on file vs symbol
+        blast-f    (when-not file-mode?
+                     (future (sh-edn "spai" "blast" target scope-path)))
+        context-f  (when-not file-mode?
+                     (future (sh-edn "spai" "context" target scope-path)))
+        who-f      (when file-mode?
+                     (future (sh-edn "spai" "who" target scope-path)))
+        related-f  (when file-mode?
+                     (future (sh-edn "spai" "related" target)))
+        ;; Shape: for files, shape their directory; for symbols, find file first via blast
+        shape-dir  (when file-mode?
+                     (let [f (io/file target)]
+                       (if (.exists f)
+                         (.getParent f)
+                         ;; Try to find it
+                         (let [found (first (sh-lines "rg" "--files" "-g" (str "**/" target) scope-path))]
+                           (when found
+                             (.getParent (io/file found)))))))
+        shape-f    (when shape-dir
+                     (future (sh-edn "spai" "shape" shape-dir)))]
+
+    (cond-> {:target target
+             :mode   (if file-mode? :file :symbol)
+             :memory (or @memory-f :no-insights)}
+
+      ;; Symbol mode results
+      blast-f   (assoc :blast   (or @blast-f :not-found))
+      context-f (assoc :context (or @context-f :not-found))
+
+      ;; File mode results
+      who-f     (assoc :who     (or @who-f :no-dependents))
+      related-f (assoc :related (or @related-f :no-history))
+
+      ;; Both modes
+      shape-f   (assoc :shape   (or @shape-f :not-found)))))
+
+(pp/pprint results)
