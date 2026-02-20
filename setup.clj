@@ -107,20 +107,51 @@
 (def hook-dst (str claude-dir "/hooks/spai-reminder.sh"))
 (def settings-file (str claude-dir "/settings.json"))
 
+(def hook-matchers
+  "Tools to intercept with the spai reminder hook."
+  ["Bash" "Grep" "Glob"])
+
+(defn spai-hook-entry
+  "Build a PreToolUse hook entry for a given tool matcher."
+  [matcher]
+  {:matcher matcher
+   :hooks   [{:type "command" :command hook-dst}]})
+
+(defn has-spai-hooks?
+  "Check if settings already has spai hooks in PreToolUse."
+  [settings]
+  (let [pre-tool-use (get-in settings [:hooks :PreToolUse])]
+    (and (sequential? pre-tool-use)
+         (some (fn [entry]
+                 (some-> entry :hooks first :command (str/includes? "spai-reminder")))
+               pre-tool-use))))
+
 (defn install-hook []
   (.mkdirs (io/file (str claude-dir "/hooks")))
   (io/copy (io/file hook-src) (io/file hook-dst))
   (.setExecutable (io/file hook-dst) true)
 
-  ;; Wire into settings.json
+  ;; Wire into settings.json using PreToolUse format
   (let [settings (if (.exists (io/file settings-file))
                    (json/parse-string (slurp settings-file) true)
                    {})]
-    (if (some-> settings :hooks :Bash :command (str/includes? "spai-reminder"))
-      (info "Claude Code hook already configured")
-      (let [updated (assoc-in settings [:hooks :Bash :command] hook-dst)]
+    (if (has-spai-hooks? settings)
+      (info "Claude Code hooks already configured")
+      (let [;; Remove old-style :Bash hook if present
+            cleaned  (if (some-> settings :hooks :Bash :command (str/includes? "spai-reminder"))
+                       (update settings :hooks dissoc :Bash)
+                       settings)
+            ;; Get existing PreToolUse entries (non-spai)
+            existing (filterv (fn [entry]
+                                (not (some-> entry :hooks first :command
+                                             (str/includes? "spai-reminder"))))
+                              (get-in cleaned [:hooks :PreToolUse] []))
+            ;; Add spai entries for each matcher
+            spai-entries (mapv spai-hook-entry hook-matchers)
+            updated  (assoc-in cleaned [:hooks :PreToolUse]
+                                (into existing spai-entries))]
         (spit settings-file (json/generate-string updated {:pretty true}))
-        (info "Claude Code hook configured in settings.json"))))
+        (info "Claude Code hooks configured (Bash, Grep, Glob)"))))
   (info "Claude Code hook installed"))
 
 (defn setup-claude-hook [flags]
@@ -132,8 +163,9 @@
       interactive?
       (do (println)
           (info "Claude Code detected!")
-          (println "  spai includes a hook that reminds Claude agents to use spai")
-          (println "  instead of chaining grep commands for code exploration.")
+          (println "  spai includes hooks that nudge Claude toward spai tools (recon,")
+          (println "  blast, shape, etc.) when it reaches for raw Grep/Glob/Bash.")
+          (println "  Escalates with repetition. Hooks fire on Bash, Grep, and Glob.")
           (println)
           (when (ask "Install Claude Code hook?" :n)
             (install-hook)))

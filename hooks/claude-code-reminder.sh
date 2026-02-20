@@ -1,41 +1,96 @@
 #!/bin/bash
 # spai reminder hook for Claude Code
 #
-# Detects when Claude uses grep/find for code exploration
-# and nudges toward spai instead.
+# Nudges Claude toward spai MCP tools when it uses raw Grep/Glob/Bash
+# for code exploration. These are the tools Claude ACTUALLY uses —
+# not shell grep/find (which Claude rarely invokes directly).
 #
-# Installed by: spai install --claude-hooks
-# Remove by deleting the hook entry from ~/.claude/settings.json
+# Triggers on: Grep, Glob, Bash (grep/find/sed/awk)
+# Installed by: spai setup --claude-hooks (or ./install.sh)
+# Remove by deleting the PreToolUse entries from ~/.claude/settings.json
 
-# Read hook input from stdin (tool parameters as JSON)
 INPUT=$(cat)
 
-# Extract command — try JSON first, fall back to raw input
+# Extract tool name and parameters from the hook input
+TOOL_NAME=""
 COMMAND=""
+PATTERN=""
+
+if echo "$INPUT" | grep -q '"tool_name"'; then
+    TOOL_NAME=$(echo "$INPUT" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+fi
 if echo "$INPUT" | grep -q '"command"'; then
     COMMAND=$(echo "$INPUT" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 fi
-[ -z "$COMMAND" ] && COMMAND="$INPUT"
-[ -z "$COMMAND" ] && exit 0
+if echo "$INPUT" | grep -q '"pattern"'; then
+    PATTERN=$(echo "$INPUT" | sed -n 's/.*"pattern"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+fi
 
 # Skip if already using spai
-echo "$COMMAND" | grep -q "spai" && exit 0
+echo "$COMMAND$PATTERN" | grep -q "spai" && exit 0
 
-# Detect code exploration patterns
-if echo "$COMMAND" | grep -qE "(grep.*-r|grep.*fn |grep.*pub |grep.*impl |grep.*struct |grep.*class |grep.*def |grep.*function|grep.*use |grep.*import|grep.*::|find.*\.(rs|py|js|ts|clj))"; then
+# --- Session tracking ---
+TRACK_DIR="/tmp/spai-hooks"
+mkdir -p "$TRACK_DIR"
+SESSION_FILE="$TRACK_DIR/session-$$-$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')"
+COUNT=0
+[ -f "$SESSION_FILE" ] && COUNT=$(cat "$SESSION_FILE")
+
+# Detect code exploration patterns by tool type
+TRIGGER=false
+
+case "$TOOL_NAME" in
+    Grep)
+        # Claude is using the Grep MCP tool for code exploration
+        if echo "$PATTERN" | grep -qEi "(fn |pub |impl |struct |enum |trait |class |def |function |import |use |mod |require)"; then
+            TRIGGER=true
+        fi
+        ;;
+    Glob)
+        # Claude is using the Glob MCP tool to find files
+        TRIGGER=true
+        ;;
+    Bash|"")
+        # Bash tool or raw input — check for grep/find/sed/awk
+        if echo "$COMMAND" | grep -qE "(grep|rg|find|sed|awk)" 2>/dev/null; then
+            TRIGGER=true
+        fi
+        ;;
+esac
+
+$TRIGGER || exit 0
+
+COUNT=$((COUNT + 1))
+echo "$COUNT" > "$SESSION_FILE"
+
+# --- Escalating responses ---
+if [ "$COUNT" -ge 5 ]; then
+    cat >&2 << EOF
+
+Search #$COUNT this session. You have spai recon — ONE call for full context:
+
+  spai recon <symbol>   # blast + context + shape + memory in one call
+  spai recon <file>     # who + related + shape + memory in one call
+
+If you're repeating this pattern, make a plugin: spai new-plugin <name>
+
+EOF
+elif [ "$COUNT" -ge 3 ]; then
+    cat >&2 << EOF
+
+Search #$COUNT. Consider spai recon <symbol-or-file> for full context in one call.
+
+EOF
+else
     cat >&2 << 'EOF'
 
-spai can do this. Try:
+spai has dedicated tools for this:
 
-  spai shape <path>          # Module structure: functions, types, impls by file
-  spai def <symbol> [path]   # Where is this defined?
-  spai usages <sym> [path]   # Where is this used?
-  spai context <sym> [path]  # Call sites with enclosing function name
-  spai sig <path>            # Function signatures (API surface)
-  spai who <file> [path]     # Reverse deps: who imports this file?
-  spai blast <sym> [path]    # Full blast radius before refactoring
-
-Run `spai help` for all 21 commands.
+  spai recon <sym|file>    # full situational awareness in one call
+  spai shape <path>        # module structure (fns, types, impls)
+  spai blast <symbol>      # blast radius (callers, importers, tests, risk)
+  spai context <symbol>    # usages WITH enclosing function names
+  spai who <file>          # reverse deps
 
 EOF
 fi
