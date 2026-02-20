@@ -110,7 +110,10 @@
               :example "spai reflect"}
    :plugins  {:args    ""
               :returns "discovered plugins with DOAP metadata (if present)"
-              :example "spai plugins"}})
+              :example "spai plugins"}
+   :update   {:args    "[--install]"
+              :returns "check for updates, optionally install"
+              :example "spai update"}})
 
 (defn- find-project-plugin-dir
   "Walk up from CWD looking for .spai/plugins/, like the bash wrapper does."
@@ -164,6 +167,77 @@
                       :spai/path (.getAbsolutePath f)}
                      (or m {}))))
           plugin-files)))
+
+(defn- read-version
+  "Read .version EDN from install dir."
+  []
+  (let [f (io/file spai-dir ".version")]
+    (when (.exists f)
+      (try (edn/read-string (slurp f))
+           (catch Exception _ nil)))))
+
+(defn- check-remote-hash
+  "Get latest commit hash from remote. Tries git ls-remote, falls back to gh."
+  [origin repo]
+  (let [urls (filterv seq [origin (str "https://github.com/" repo ".git")])]
+    (or
+      ;; Try each URL with git ls-remote
+      (some (fn [url]
+              (try
+                (let [{:keys [exit out]} @(p/process ["git" "ls-remote" url "refs/heads/main"]
+                                                     {:out :string :err :string})]
+                  (when (and (zero? exit) (seq out))
+                    (first (str/split (str/trim out) #"\s+"))))
+                (catch Exception _ nil)))
+            urls)
+      ;; Fall back to gh api
+      (try
+        (let [{:keys [exit out]} @(p/process ["gh" "api" (str "repos/" repo "/commits/main") "--jq" ".sha"]
+                                             {:out :string :err :string})]
+          (when (zero? exit) (str/trim out)))
+        (catch Exception _ nil)))))
+
+(defn check-update
+  "Check if a newer version is available."
+  []
+  (let [version (read-version)]
+    (if-not version
+      {:status :unknown :message "No version file. Run install.sh to create one."}
+      (let [current (:commit version)
+            remote  (check-remote-hash (:origin version) (:repo version))]
+        (cond
+          (nil? remote)
+          {:status :check-failed :current current
+           :message "Could not reach remote. Check network/auth."}
+
+          (= current remote)
+          {:status :up-to-date :commit current :installed (:installed version)}
+
+          :else
+          {:status :update-available
+           :current (subs current 0 (min 7 (count current)))
+           :latest  (subs remote 0 (min 7 (count remote)))
+           :install "Run: spai update --install"})))))
+
+(defn do-update!
+  "Download and install the latest version."
+  []
+  (let [version (read-version)
+        repo    (or (:repo version) "Semantic-partners/spai")
+        tmp     (str (System/getProperty "java.io.tmpdir") "/spai-update-" (System/currentTimeMillis))
+        origin  (:origin version)]
+    (let [clone-url (or (when (seq origin) origin)
+                        (str "https://github.com/" repo ".git"))
+          {:keys [exit]} @(p/process ["git" "clone" "--depth" "1" clone-url tmp]
+                                     {:out :string :err :string})]
+      (if-not (zero? exit)
+        {:status :failed :message (str "Could not clone from " clone-url)}
+        (let [{:keys [exit out err]} @(p/process ["bash" (str tmp "/install.sh")]
+                                                  {:out :string :err :string})]
+          @(p/process ["rm" "-rf" tmp] {:out :string :err :string})
+          (if (zero? exit)
+            {:status :updated :output out}
+            {:status :failed :message err}))))))
 
 (let [[command & args] *command-line-args*]
   (case command
@@ -249,6 +323,10 @@
     "reflect"  (pp/pprint (reflect))
     "plugins"  (do (log-usage! "plugins" args {})
                    (pp/pprint (discover-plugins)))
+    "update"   (do (log-usage! "update" args {})
+                   (if (some #{"--install"} args)
+                     (pp/pprint (do-update!))
+                     (pp/pprint (check-update))))
     "setup"    (load-file (str spai-dir "/setup.clj"))
     "link"     (let [source (or (first args) ".")
                      source-abs (.getCanonicalPath (io/file source))

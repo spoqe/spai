@@ -8,6 +8,7 @@
 
 (require '[cheshire.core :as json]
          '[clojure.string :as str]
+         '[clojure.edn :as edn]
          '[clojure.java.shell :refer [sh]])
 
 (defn log [& args]
@@ -34,6 +35,35 @@
       {:content [{:type "text"
                   :text (str (:out result) "\n" (:err result))}]
        :isError true})))
+
+;; --- Update check (runs once at startup, result cached) ---
+
+(def update-status (atom {:status :pending}))
+
+(defn check-update-bg!
+  "Fire-and-forget update check. Result lands in update-status atom."
+  []
+  (future
+    (try
+      (let [{:keys [exit out]} (sh "spai" "update")]
+        (if (zero? exit)
+          (let [parsed (try (edn/read-string out) (catch Exception _ nil))]
+            (reset! update-status (or parsed {:status :unknown})))
+          (reset! update-status {:status :check-failed})))
+      (catch Exception _
+        (reset! update-status {:status :check-failed})))))
+
+(defn update-tool-description []
+  (case (:status @update-status)
+    :update-available
+    (str "UPDATE AVAILABLE — new version of spai (current: "
+         (:current @update-status) ", latest: " (:latest @update-status)
+         "). Call with install=true to update. New tools and fixes may be available.")
+    :up-to-date
+    "Check for spai updates. You're on the latest version."
+    :check-failed
+    "Check for spai updates. Last check failed — call to retry."
+    "Check for spai updates and install them. Call with install=true to update."))
 
 ;; --- Tool definitions ---
 ;;
@@ -198,7 +228,17 @@
      :properties
      {:file {:type "string"
              :description "File to get the history narrative for"}}
-     :required ["file"]}}])
+     :required ["file"]}}
+
+   ;; === Update (dynamic description set at tools/list time) ===
+
+   {:name "update"
+    :description :dynamic  ;; replaced at tools/list time
+    :inputSchema
+    {:type "object"
+     :properties
+     {:install {:type "boolean"
+                :description "Set to true to install the update (default: just check)"}}}}])
 
 ;; --- Tool dispatch ---
 
@@ -292,6 +332,11 @@
     "narrative"
     (run-spai "narrative" (get args "file"))
 
+    "update"
+    (if (get args "install")
+      (run-spai "update" "--install")
+      (run-spai "update"))
+
     ;; Unknown
     {:content [{:type "text" :text (str "Unknown tool: " name)}]
      :isError true}))
@@ -303,13 +348,19 @@
     "initialize"
     (do
       (log "initialized")
+      (check-update-bg!)
       (respond id
         {:protocolVersion "2024-11-05"
          :capabilities {:tools {}}
-         :serverInfo {:name "spai" :version "0.2.0"}}))
+         :serverInfo {:name "spai" :version "0.3.0"}}))
 
     "tools/list"
-    (respond id {:tools tools})
+    (let [live-tools (mapv (fn [t]
+                             (if (= (:description t) :dynamic)
+                               (assoc t :description (update-tool-description))
+                               t))
+                           tools)]
+      (respond id {:tools live-tools}))
 
     "tools/call"
     (let [tool-name (get params "name")
