@@ -1,0 +1,95 @@
+#!/usr/bin/env bb
+;; spai plugin: new-plugin
+;;
+;; Scaffolds a new spai plugin. This file is itself a plugin —
+;; read it to learn the contract:
+;;
+;;   1. Named spai-<name>, executable, on PATH via .spai/plugins/ or ~/.local/share/spai/plugins/
+;;   2. Receives args as positional params
+;;   3. Outputs EDN
+;;   4. Optional: EDN metadata map after shebang (readable by `spai plugins`)
+;;
+;; Usage:  spai new-plugin <name> [project|user]
+
+{:spai/args    "<name> [project|user]"
+ :spai/returns "scaffold a new plugin (default: project)"
+ :spai/example "spai new-plugin sparql-templates project"}
+
+(require '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[clojure.pprint :as pp]
+         '[babashka.process :as p])
+
+(def args *command-line-args*)
+(def plugin-name (first args))
+(def scope (or (second args) "project"))
+
+(when (or (nil? plugin-name) (contains? #{"--help" "-h"} plugin-name))
+  (println "Usage: spai new-plugin <name> [project|user]")
+  (println)
+  (println "  project  → .spai/plugins/spai-<name>  (default, committed with your repo)")
+  (println "  user     → ~/.local/share/spai/plugins/spai-<name>  (global, all projects)")
+  (System/exit 0))
+
+(def target-dir
+  (case scope
+    "user"    (str (or (System/getenv "XDG_DATA_HOME")
+                       (str (System/getProperty "user.home") "/.local/share"))
+                   "/spai/plugins")
+    "project" (let [cwd (System/getProperty "user.dir")]
+                ;; Walk up to find .spai or project root (has .git)
+                (loop [d (io/file cwd)]
+                  (cond
+                    (nil? d) (str cwd "/.spai/plugins")
+                    (.exists (io/file d ".spai")) (str (.getPath d) "/.spai/plugins")
+                    (.exists (io/file d ".git"))  (str (.getPath d) "/.spai/plugins")
+                    :else (recur (.getParentFile d)))))
+    (do (println (str "Unknown scope: " scope ". Use 'project' or 'user'."))
+        (System/exit 1))))
+
+(def target-file (io/file target-dir (str "spai-" plugin-name)))
+
+(when (.exists target-file)
+  (pp/pprint {:error :already-exists
+              :path  (.getPath target-file)})
+  (System/exit 1))
+
+(.mkdirs (io/file target-dir))
+
+(def skeleton
+  (str "#!/usr/bin/env bb
+;; spai plugin: " plugin-name "
+;;
+;; Usage:  spai " plugin-name " [args]
+
+{:spai/args    \"[path]\"
+ :spai/returns \"describe what this plugin returns\"
+ :spai/example \"spai " plugin-name " src/\"}
+
+(require '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[clojure.pprint :as pp]
+         '[babashka.process :as p])
+
+(defn sh [& cmd]
+  (let [{:keys [exit out]} (apply p/shell {:out :string :err :string :continue true} cmd)]
+    (when (zero? exit) (str/trim out))))
+
+(def args *command-line-args*)
+(def path (or (first args) \".\"))
+
+;; --- your logic here ---
+;; Example: find files matching a pattern
+;; (def results (sh \"rg\" \"--files\" \"-g\" \"*.sparql\" path))
+
+(pp/pprint {:plugin \"" plugin-name "\"
+            :path   path
+            :todo   \"replace this with real output\"})
+"))
+
+(spit target-file skeleton)
+(.setExecutable target-file true)
+
+(pp/pprint {:created (.getPath target-file)
+            :scope   scope
+            :run     (str "spai " plugin-name)})
