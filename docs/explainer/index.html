@@ -228,6 +228,30 @@
     font-weight: 600;
   }
 
+  .rt-thinking {
+    padding: 0.3rem 0.75rem;
+    margin: 0.15rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent3);
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: opacity 0.15s ease, max-height 0.15s ease;
+    font-style: italic;
+  }
+  .rt-thinking.visible {
+    opacity: 0.7;
+    max-height: 2rem;
+  }
+  @keyframes pulse-think {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.9; }
+  }
+  .rt-thinking.visible {
+    animation: pulse-think 1.5s ease-in-out infinite;
+  }
+
   /* ═══════════════════════════════════════════ */
   /* Section 2: One Call Replaces Many           */
   /* ═══════════════════════════════════════════ */
@@ -507,6 +531,50 @@
     color: var(--accent);
   }
 
+  /* CTA */
+  .cta {
+    text-align: center;
+    padding: 3rem 0;
+    margin-top: 2rem;
+  }
+  .cta-links {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+  .cta-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+  }
+  .cta-links a:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px var(--glow);
+  }
+  .cta-links a.primary {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .cta-links a.primary:hover {
+    opacity: 0.85;
+    box-shadow: 0 4px 25px var(--glow);
+  }
+
   /* Tagline */
   .tagline {
     text-align: center;
@@ -559,28 +627,32 @@
       The agent needs to know: <em>who calls this function, and what breaks if I change it?</em>
     </div>
 
+    <div class="rt-controls" style="margin-bottom:1.5rem;">
+      <button class="btn play" id="rt-play-btn" onclick="playRoundtrip()">play</button>
+    </div>
+
     <div class="rt-grid">
 
       <div class="rt-panel without" id="panel-without">
         <div class="rt-label"><span class="dot"></span> Without spai</div>
-        <div class="rt-step" data-step="0"><span class="dim">$</span> grep -r "execute_plan" --include="*.rs"</div>
-        <div class="rt-step" data-step="1"><span class="dim">$</span> grep -r "use.*executor" --include="*.rs"</div>
-        <div class="rt-step" data-step="2"><span class="dim">$</span> grep -rn "fn execute_plan" src/</div>
-        <div class="rt-step" data-step="3"><span class="dim">$</span> grep -r "execute_plan" tests/</div>
-        <div class="rt-step" data-step="4"><span class="dim">$</span> git log --oneline -5 -- src/executor.rs</div>
-        <div class="rt-counter"><span class="count" id="count-without">0</span>round-trips</div>
+        <div class="rt-step done" data-step="0"><span class="dim">$</span> grep -r "execute_plan" --include="*.rs"</div>
+        <div class="rt-thinking" id="think-0">thinking &mdash; OK, found 14 matches. Which ones are imports?</div>
+        <div class="rt-step done" data-step="1"><span class="dim">$</span> grep -r "use.*executor" --include="*.rs"</div>
+        <div class="rt-thinking" id="think-1">thinking &mdash; now where's the definition?</div>
+        <div class="rt-step done" data-step="2"><span class="dim">$</span> grep -rn "fn execute_plan" src/</div>
+        <div class="rt-thinking" id="think-2">thinking &mdash; are there tests?</div>
+        <div class="rt-step done" data-step="3"><span class="dim">$</span> grep -r "execute_plan" tests/</div>
+        <div class="rt-thinking" id="think-3">thinking &mdash; who touched this recently?</div>
+        <div class="rt-step done" data-step="4"><span class="dim">$</span> git log --oneline -5 -- src/executor.rs</div>
+        <div class="rt-counter"><span class="count" id="count-without">5</span>round-trips</div>
       </div>
 
       <div class="rt-panel with" id="panel-with">
         <div class="rt-label"><span class="dot"></span> With spai</div>
-        <div class="rt-step" data-step="0"><span class="dim">$</span> spai blast execute_plan</div>
-        <div class="rt-counter"><span class="count" id="count-with">0</span>round-trip</div>
+        <div class="rt-step done" data-step="0"><span class="dim">$</span> spai blast execute_plan</div>
+        <div class="rt-counter"><span class="count" id="count-with">1</span>round-trip</div>
       </div>
 
-    </div>
-
-    <div class="rt-controls">
-      <button class="btn play" onclick="playRoundtrip()">play</button>
     </div>
   </section>
 
@@ -828,10 +900,26 @@
     </div>
 
     <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Can I add my own tools?</div>
+      <div class="faq-a">Yes. spai discovers plugins automatically at three levels: bundled in the install directory, project-local in <code>.spai/plugins/</code>, and user-level on your PATH. Any executable named <code>spai-*</code> becomes a command. Run <code>spai new-plugin my-tool</code> to scaffold one. Your project's plugins travel with the repo. Your personal plugins stay on your machine. Both show up in <code>spai help</code>.</div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
       <div class="faq-q">What language is this written in?</div>
       <div class="faq-a">Babashka &mdash; a fast-starting Clojure scripting runtime. spai is ~3000 lines of Clojure that starts in milliseconds. The MCP server is the same codebase. No build step, no compilation, no JVM startup. Edit a file, it's live.</div>
     </div>
 
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <div class="section-head">
+      <h2>Get <span>started.</span></h2>
+    </div>
+    <div class="cta-links">
+      <a href="https://github.com/Semantic-partners/spai" class="primary">GitHub</a>
+      <a href="mailto:spai@semanticpartners.com">spai@semanticpartners.com</a>
+    </div>
   </section>
 
   <!-- Tagline -->
@@ -849,41 +937,65 @@
 
   let rtAnimating = false;
 
+  function hideAllThinking() {
+    document.querySelectorAll('.rt-thinking').forEach(t => t.classList.remove('visible'));
+  }
+
   async function playRoundtrip() {
     if (rtAnimating) return;
     rtAnimating = true;
 
-    // Reset
+    const btn = document.getElementById('rt-play-btn');
+    btn.textContent = 'playing...';
+    btn.style.pointerEvents = 'none';
+
+    // Reset everything
     document.querySelectorAll('.rt-step').forEach(s => {
       s.classList.remove('active', 'done');
     });
+    hideAllThinking();
     document.getElementById('count-without').textContent = '0';
     document.getElementById('count-with').textContent = '0';
 
     const withoutSteps = document.querySelectorAll('#panel-without .rt-step');
     const withStep = document.querySelector('#panel-with .rt-step');
 
-    // Animate "without" steps one by one
+    await sleep(400);
+
+    // Animate "without" steps with thinking between each
     for (let i = 0; i < withoutSteps.length; i++) {
       if (i > 0) withoutSteps[i - 1].classList.remove('active');
       if (i > 0) withoutSteps[i - 1].classList.add('done');
       withoutSteps[i].classList.add('active');
       document.getElementById('count-without').textContent = (i + 1).toString();
-      await sleep(600);
+      await sleep(500);
+
+      // Show thinking after each step (except the last)
+      const think = document.getElementById('think-' + i);
+      if (think) {
+        think.classList.add('visible');
+        await sleep(900);
+        think.classList.remove('visible');
+        await sleep(150);
+      }
     }
 
-    await sleep(300);
+    await sleep(200);
 
-    // Now the "with" side
+    // Now the "with" side — instant
     withStep.classList.add('active');
     document.getElementById('count-with').textContent = '1';
 
-    await sleep(800);
+    await sleep(1000);
 
-    // Mark without last step done
+    // Final state
     withoutSteps[withoutSteps.length - 1].classList.remove('active');
     withoutSteps[withoutSteps.length - 1].classList.add('done');
+    withStep.classList.remove('active');
+    withStep.classList.add('done');
 
+    btn.textContent = 'replay';
+    btn.style.pointerEvents = '';
     rtAnimating = false;
   }
 
