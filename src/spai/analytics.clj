@@ -2,7 +2,8 @@
   "Usage logging, stats, reflection.
    Self-awareness. What gets used? What's missing?"
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [cheshire.core :as json]))
 
 (def ^:private log-file
   "Append-only usage log. EDN records, one per line.
@@ -10,6 +11,13 @@
   (str (or (System/getenv "XDG_DATA_HOME")
            (str (System/getProperty "user.home") "/.local/share"))
        "/spai/usage.log"))
+
+(def ^:private claude-log-file
+  "JSONL log of Claude tool calls, written by the PreToolUse hook.
+   Same directory as usage.log."
+  (str (or (System/getenv "XDG_DATA_HOME")
+           (str (System/getProperty "user.home") "/.local/share"))
+       "/spai/claude-tools.log"))
 
 (def ^:private log-max-lines
   "Keep the most recent N entries. ~15MB at capacity. Revisit after a
@@ -44,6 +52,23 @@
          (keep (fn [line]
                  (when (seq line)
                    (try (read-string line) (catch Exception _ nil))))))))
+
+(defn- read-claude-log
+  "Read Claude tool call log (JSONL from PreToolUse hook).
+   Normalizes to same shape as usage.log entries plus :source :claude."
+  []
+  (when (.exists (io/file claude-log-file))
+    (->> (str/split-lines (slurp claude-log-file))
+         (keep (fn [line]
+                 (when (seq line)
+                   (try
+                     (let [m (json/parse-string line true)]
+                       (cond-> {:ts      (:ts m)
+                                :command (:tool m)
+                                :args    (when (seq (:key m)) [(:key m)])
+                                :source  :claude}
+                         (seq (:sid m)) (assoc :session (:sid m))))
+                     (catch Exception _ nil))))))))
 
 (defn stats
   "Usage statistics: what commands get used, how often, on what paths."
@@ -95,27 +120,34 @@
 ;; -------------------------------------------------------------------
 
 (defn- extract-sessions
-  "Group log entries into sessions. A session break is a gap > 10 minutes."
+  "Group log entries into sessions. Uses :session ID when available (from
+   claude-tools.log), falls back to time-gap heuristic (>10 min) for entries
+   without session IDs."
   [entries]
   (when (seq entries)
     (let [gap-ms (* 10 60 1000)]
-      (reduce
-        (fn [sessions entry]
-          (let [ts (try (java.time.Instant/parse (:ts entry)) (catch Exception _ nil))]
-            (if (or (empty? sessions)
-                    (nil? ts)
-                    (let [last-ts (:last-ts (meta (peek sessions)))]
-                      (and last-ts
-                           (> (.toEpochMilli ^java.time.Instant ts)
-                              (+ (.toEpochMilli ^java.time.Instant last-ts) gap-ms)))))
-              ;; New session
-              (conj sessions (with-meta [entry] {:last-ts ts}))
-              ;; Same session
-              (let [curr (peek sessions)
-                    updated (conj curr entry)]
-                (conj (pop sessions) (with-meta updated {:last-ts ts}))))))
-        []
-        entries))))
+      (->> entries
+           (reduce
+             (fn [sessions entry]
+               (let [sid (:session entry)
+                     ts  (try (java.time.Instant/parse (:ts entry)) (catch Exception _ nil))
+                     cur (peek sessions)
+                     cur-sid (:session (meta cur))]
+                 (if (or (empty? sessions)
+                         ;; Session ID changed (both have IDs but different)
+                         (and sid cur-sid (not= sid cur-sid))
+                         ;; No session IDs — fall back to time gap
+                         (and (nil? sid) (nil? cur-sid) ts
+                              (let [last-ts (:last-ts (meta cur))]
+                                (and last-ts
+                                     (> (.toEpochMilli ^java.time.Instant ts)
+                                        (+ (.toEpochMilli ^java.time.Instant last-ts) gap-ms))))))
+                   ;; New session
+                   (conj sessions (with-meta [entry] {:last-ts ts :session sid}))
+                   ;; Same session
+                   (let [updated (conj cur entry)]
+                     (conj (pop sessions) (with-meta updated {:last-ts ts :session (or sid cur-sid)}))))))
+             [])))))
 
 (defn- command-signature
   "Abstract a log entry to its command shape (command + path-like first arg)."
@@ -180,27 +212,43 @@
 ;; -------------------------------------------------------------------
 
 (defn reflect
-  "Session-start briefing. Plugins, patterns, exploration history."
+  "Session-start briefing. Plugins, patterns, exploration history.
+   Merges spai usage.log with Claude tool call log for full chain visibility."
   []
-  (let [entries    (read-log)
-        plugins    (discover-plugins)
-        proj-paths (when (seq entries) (project-paths entries))
-        sequences  (when (seq entries) (detect-sequences entries))
-        ;; Most-explored paths in this project
-        explored   (when (seq proj-paths)
-                     (->> proj-paths
-                          (map :path)
-                          frequencies
-                          (sort-by val >)
-                          (take 10)
-                          vec))
-        ;; What commands are used in this project
-        proj-cmds  (when (seq proj-paths)
-                     (->> proj-paths
-                          (map :command)
-                          frequencies
-                          (sort-by val >)
-                          vec))]
+  (let [spai-entries   (read-log)
+        claude-entries (read-claude-log)
+        ;; Merge both logs sorted by timestamp for interleaved chain detection
+        all-entries    (->> (concat
+                             (map #(assoc % :source :spai) spai-entries)
+                             claude-entries)
+                           (sort-by :ts))
+        plugins        (discover-plugins)
+        ;; Sequence detection on the merged stream
+        sequences      (when (seq all-entries) (detect-sequences all-entries))
+        ;; Project paths from spai log (claude log paths handled separately)
+        proj-paths     (when (seq spai-entries) (project-paths spai-entries))
+        ;; spai command mix
+        spai-cmds      (when (seq proj-paths)
+                         (->> proj-paths
+                              (map :command)
+                              frequencies
+                              (sort-by val >)
+                              vec))
+        ;; Claude tool mix
+        claude-cmds    (when (seq claude-entries)
+                         (->> claude-entries
+                              (map :command)
+                              frequencies
+                              (sort-by val >)
+                              vec))
+        ;; Most-explored paths (spai)
+        explored       (when (seq proj-paths)
+                         (->> proj-paths
+                              (map :path)
+                              frequencies
+                              (sort-by val >)
+                              (take 10)
+                              vec))]
     (cond-> {}
       ;; Always show plugins first — most actionable
       (seq plugins)
@@ -209,7 +257,7 @@
       (empty? plugins)
       (assoc :plugins "None. Run: spai new-plugin <name> [project|user]")
 
-      ;; Repeated sequences — the "make a plugin" signal
+      ;; Repeated sequences from merged stream — cross-tool chains
       (seq sequences)
       (assoc :repeated-sequences sequences)
 
@@ -217,10 +265,15 @@
       (seq explored)
       (assoc :explored-paths explored)
 
-      ;; Command mix for this project
-      (seq proj-cmds)
-      (assoc :project-commands proj-cmds)
+      ;; spai command mix
+      (seq spai-cmds)
+      (assoc :spai-commands spai-cmds)
+
+      ;; Claude tool mix
+      (seq claude-cmds)
+      (assoc :claude-tools claude-cmds)
 
       ;; Total stats
       true
-      (assoc :total-calls (count entries)))))
+      (assoc :total-calls {:spai   (count spai-entries)
+                           :claude (count claude-entries)}))))
