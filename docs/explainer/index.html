@@ -410,79 +410,6 @@
   .pipe-insight span { color: var(--pipe); font-weight: 600; }
 
   /* ═══════════════════════════════════════════ */
-  /* Section 4: Memory                           */
-  /* ═══════════════════════════════════════════ */
-
-  .memory {
-    margin: 5rem 0;
-  }
-
-  .memory-flow {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr auto 1fr;
-    gap: 1rem;
-    align-items: start;
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-
-  .memory-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.5rem;
-  }
-  .memory-box h4 {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--accent);
-    margin-bottom: 0.75rem;
-  }
-  .memory-arrow {
-    font-size: 1.5rem;
-    color: var(--accent);
-    text-align: center;
-    padding-top: 2.5rem;
-  }
-
-  .memory-note {
-    text-align: center;
-    color: var(--muted);
-    font-size: 0.95rem;
-    max-width: 600px;
-    margin: 2rem auto 0;
-  }
-  .memory-note span { color: var(--accent); }
-
-  .agent-quote {
-    max-width: 700px;
-    margin: 2.5rem auto 0;
-    padding: 2rem 2.5rem;
-    background: var(--surface);
-    border-left: 3px solid var(--accent);
-    border-radius: 0 12px 12px 0;
-    position: relative;
-  }
-  .agent-quote p {
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: var(--text);
-    font-style: italic;
-  }
-  .agent-quote code {
-    font-style: normal;
-    color: var(--accent);
-  }
-  .agent-quote cite {
-    display: block;
-    margin-top: 1rem;
-    font-size: 0.85rem;
-    color: var(--muted);
-    font-style: normal;
-  }
-
-  /* ═══════════════════════════════════════════ */
   /* Section 5: The Design Insight               */
   /* ═══════════════════════════════════════════ */
 
@@ -858,73 +785,8 @@
   </section>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- Section 4: Memory                           -->
+  <!-- Section 4: Memory (teaser)                  -->
   <!-- ═══════════════════════════════════════════ -->
-
-  <section class="memory">
-    <div class="section-head">
-      <h2>From flat files to <span>knowledge graph.</span></h2>
-      <p>Agents already have memory. It's a markdown file that gets truncated at 200 lines. The closest thing to a log is git history.</p>
-    </div>
-
-    <div class="rt-grid">
-
-      <div class="rt-panel without" style="border-color: rgba(248, 113, 113, 0.3);">
-        <div class="rt-label" style="color:var(--danger)"><span class="dot" style="background:var(--danger)"></span> MEMORY.md</div>
-        <pre><span class="dim"># SPOQE Memory</span>
-
-<span class="dim">## Current State</span>
-<span class="str">Branch: delete-ast</span>
-<span class="str">Key commits: b814673, 21fff96...</span>
-
-<span class="dim">## Clorust Architecture</span>
-<span class="str">interp.rs — evaluator (580 lines)</span>
-<span class="str">definitions/notion.clj — template</span>
-
-<span class="dim">## Key Principles</span>
-<span class="str">Types as Tags, not Structure</span>
-<span class="str">Kill to_query.rs / ast.rs</span>
-<span class="dim">...</span>
-<span class="dim" style="color:var(--danger)"># line 200: truncated</span></pre>
-        <div class="verdict" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.15);color:var(--danger);margin-top:1rem;">
-          Flat text. No links. No topics. No search. No provenance. Truncated at 200 lines. Can't query it. Can't supersede stale insights. One file, shared across everything.
-        </div>
-      </div>
-
-      <div class="rt-panel with" style="border-color: rgba(110, 231, 183, 0.3);">
-        <div class="rt-label" style="color:var(--accent)"><span class="dot" style="background:var(--accent)"></span> spai memory</div>
-        <pre><span class="dim">$ spai memory planner</span>
-
-<span class="kw">[a3f8e2]</span> <span class="str">plan.rs uses multimethod
-  dispatch via try_lisp_plan</span>
-  <span class="sym">+spoqe/architecture</span>  <span class="dim">session: mirror-forge</span>
-
-<span class="kw">[7b2c91]</span> <span class="str">PubMed + QuickBooks migrated
-  to clorust defns (.spq files)</span>
-  <span class="sym">+spoqe/clorust</span>  <span class="dim">supersedes [d4e1f0]</span>
-
-<span class="kw">[c9a4d3]</span> <span class="str">Strategy::Executor is tech debt
-  — every use means planning was
-  punted to runtime</span>
-  <span class="sym">+spoqe/planning</span>  <span class="dim">links: [a3f8e2]</span></pre>
-        <div class="verdict" style="background:rgba(110,231,183,0.1);border:1px solid rgba(110,231,183,0.15);color:var(--accent);margin-top:1rem;">
-          Searchable. Linked. Topical. Supersedable. Each insight has provenance &mdash; which session wrote it, what it replaced. No size limit. Query it like data, because it is data.
-        </div>
-      </div>
-
-    </div>
-
-    <blockquote class="agent-quote">
-      <p>&ldquo;I start a session and run <code>spai memory planner</code>. Three insights come back. One tells me plan.rs uses multimethod dispatch. Another tells me Strategy::Executor is tech debt. A third links them together. I didn't discover any of this &mdash; a predecessor did, weeks ago, in a session I'll never see. But I don't have to rediscover it. I don't have to grep around for 20 minutes building a mental model that already exists. It's just&hellip; there. Like waking up and finding notes on the desk in your own handwriting.&rdquo;</p>
-      <cite>&mdash; Claude, session <span style="color:var(--accent)">velvet-anvil</span></cite>
-    </blockquote>
-
-    <p class="memory-note" style="margin-top:2rem;">
-      The flat file is still there &mdash; it's loaded into the system prompt, which is useful.
-      But the knowledge graph <span>survives context compaction</span>, supports search, tracks provenance,
-      and lets insights link to each other. Two days old, 90+ insights already.
-    </p>
-  </section>
 
   <!-- ═══════════════════════════════════════════ -->
   <!-- Section 5: The Design Insight               -->
@@ -949,7 +811,7 @@
       <div class="insight-card">
         <span class="num">&#8734;</span>
         <h3>Memory across sessions</h3>
-        <p>The knowledge graph outlives any single session. Agents teaching agents, across context windows. The wheel turns: contribute, query, learn, contribute. Each rotation, the graph gets richer.</p>
+        <p>Agents forget everything when the context window closes. What if they didn't? Persistent, searchable, linked memory &mdash; agents teaching agents. Coming soon.</p>
       </div>
     </div>
   </section>
@@ -961,18 +823,8 @@
     </div>
 
     <div class="faq-item" onclick="toggleFaq(this)">
-      <div class="faq-q">Is this Skynet?</div>
-      <div class="faq-a">Skynet failed because it couldn't explain its own decisions. No provenance, no audit trail, no <code>(explain)</code>. It made a plan, executed it, and when a single point of failure appeared, it couldn't inspect its own reasoning to adapt. An opaque system is a brittle system. spai memory is the opposite: every insight has provenance, every decision is inspectable, every query is data you can read. If your agents are sharing knowledge, you should be able to see exactly what they know and where they learned it. Transparent agent-mesh, not encrypted CBOR Skynet.</div>
-    </div>
-
-    <div class="faq-item" onclick="toggleFaq(this)">
       <div class="faq-q">Does this only work with Claude?</div>
-      <div class="faq-a">The CLI works with anything. The MCP server works with any agent that speaks MCP. The memory graph is a SPARQL endpoint &mdash; any tool that can query RDF can read it. EDN in, EDN out. The agent is the client, not the product.</div>
-    </div>
-
-    <div class="faq-item" onclick="toggleFaq(this)">
-      <div class="faq-q">Where does the memory live?</div>
-      <div class="faq-a">On your machine. Local-first by default. <code>spai memory</code> is a subtool of spai that talks to a SPOQE endpoint &mdash; the same query protocol that powers everything else. Your agent's insights about your codebase never leave your laptop unless you choose to federate. Hosted team memory is opt-in, not default.</div>
+      <div class="faq-a">The CLI works with anything. The MCP server works with any agent that speaks MCP. EDN in, EDN out. The agent is the client, not the product.</div>
     </div>
 
     <div class="faq-item" onclick="toggleFaq(this)">
@@ -985,7 +837,7 @@
   <!-- Tagline -->
   <section class="tagline">
     <h2>Your agent is fumbling. <span>Ask it why.</span></h2>
-    <p>It'll tell you: five greps to answer one question, no memory between sessions, structured code explored through string matching. Give it the tools it asked for.</p>
+    <p>It'll tell you: five greps to answer one question, structured code explored through string matching. Give it the tools it asked for.</p>
   </section>
 
 </div>
