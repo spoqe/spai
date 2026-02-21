@@ -613,6 +613,24 @@
   }
   .loop-insight span { color: var(--pipe); font-weight: 600; }
 
+  .loop-quote {
+    text-align: center;
+    font-style: italic;
+    color: var(--fg);
+    font-size: 1.05rem;
+    margin: 2rem auto 0;
+    max-width: 32rem;
+    border: none;
+    padding: 0;
+  }
+  .loop-quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+  }
+
   /* ═══════════════════════════════════════════ */
   /* Section 5: The Design Insight               */
   /* ═══════════════════════════════════════════ */
@@ -1117,6 +1135,8 @@
       </div>
 
       <p class="loop-insight">The worker, the inspector, and the process are the same system. No committee gates the experiment. <span>spai new-plugin</span> is pulling the cord.</p>
+
+      <blockquote class="loop-quote">&ldquo;A production line that never stops is either extremely good or extremely bad.&rdquo;<cite>&mdash; Taiichi Ohno</cite></blockquote>
     </div>
   </section>
 
@@ -1426,11 +1446,11 @@
 
       // Show example data after the "reflect" stage
       if (i === 1) {
-        await sleep(1000);
+        await sleep(1500);
         document.getElementById('loop-ex').classList.add('visible');
       }
 
-      await sleep(2000);
+      await sleep(3500);
 
       if (i < 3) {
         document.getElementById('ls-' + i).classList.remove('active');
@@ -1440,14 +1460,14 @@
 
     // Final: loop arrow lights up — the return path
     document.getElementById('la-3').classList.add('active');
-    await sleep(1500);
+    await sleep(2500);
 
     // Return to start — the loop closes
     document.getElementById('ls-3').classList.remove('active');
     document.getElementById('ls-3').classList.add('done');
     document.getElementById('ls-0').classList.remove('done');
     document.getElementById('ls-0').classList.add('active');
-    await sleep(2000);
+    await sleep(3500);
 
     document.getElementById('ls-0').classList.remove('active');
     document.getElementById('ls-0').classList.add('done');
