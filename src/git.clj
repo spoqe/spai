@@ -120,7 +120,7 @@
    Returns {:functions [{:name :text}] :types [{:name :kind :text}]}
    Uses the same patterns as shape-raw but works on strings, not files."
   [content lang]
-  (let [pats (get lang-patterns lang)]
+  (let [pats (get @lang-patterns lang)]
     (when pats
       (let [lines (str/split-lines content)
             match-lines (fn [pat-key extract-fn]

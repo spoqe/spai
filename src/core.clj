@@ -71,38 +71,51 @@
 ;; Language detection & patterns
 ;; -------------------------------------------------------------------
 
-(def ^:private lang-patterns
-  {:rust
-   {:functions "^\\s*pub(\\(crate\\))?\\s*(async\\s+)?fn\\s+\\w+"
-    :types     "^\\s*(pub(\\(crate\\))?\\s+)?(struct|enum|trait)\\s+\\w+"
-    :impls     "^\\s*impl(<[^>]*>)?\\s+\\w+"
-    :mods      "^\\s*(pub(\\(crate\\))?\\s+)?mod\\s+\\w+"
-    :imports   "^use\\s+"}
+(def lang-patterns
+  "Language → grep patterns registry. Open for extension via register-lang!."
+  (atom
+   {:rust
+    {:functions "^\\s*pub(\\(crate\\))?\\s*(async\\s+)?fn\\s+\\w+"
+     :types     "^\\s*(pub(\\(crate\\))?\\s+)?(struct|enum|trait)\\s+\\w+"
+     :impls     "^\\s*impl(<[^>]*>)?\\s+\\w+"
+     :mods      "^\\s*(pub(\\(crate\\))?\\s+)?mod\\s+\\w+"
+     :imports   "^use\\s+"}
 
-   :typescript
-   {:functions "(export\\s+)?(default\\s+)?(async\\s+)?function\\s+\\w+|(?:export\\s+)?(?:const|let)\\s+\\w+\\s*[:=].*=>"
-    :types     "(export\\s+)?(interface|type|class|enum)\\s+\\w+"
-    :imports   "^import\\s+"}
+    :typescript
+    {:functions "(export\\s+)?(default\\s+)?(async\\s+)?function\\s+\\w+|(?:export\\s+)?(?:const|let)\\s+\\w+\\s*[:=].*=>"
+     :types     "(export\\s+)?(interface|type|class|enum)\\s+\\w+"
+     :imports   "^import\\s+"}
 
-   :clojure
-   {:functions "\\(defn-?\\s+\\S+"
-    :types     "\\(def(record|type|protocol|multi)\\s+\\S+"
-    :imports   "\\(:?require\\s+"}
+    :clojure
+    {:functions "\\(defn-?\\s+\\S+"
+     :types     "\\(def(record|type|protocol|multi)\\s+\\S+"
+     :imports   "\\(:?require\\s+"}
 
-   :python
-   {:functions "^\\s*(async\\s+)?def\\s+\\w+"
-    :types     "^\\s*class\\s+\\w+"
-    :imports   "^(import|from)\\s+"}
+    :python
+    {:functions "^\\s*(async\\s+)?def\\s+\\w+"
+     :types     "^\\s*class\\s+\\w+"
+     :imports   "^(import|from)\\s+"}
 
-   :go
-   {:functions "^func\\s+(\\(\\w+\\s+\\*?\\w+\\)\\s+)?\\w+"
-    :types     "^type\\s+\\w+\\s+(struct|interface)"
-    :imports   "^import\\s+"}
+    :go
+    {:functions "^func\\s+(\\(\\w+\\s+\\*?\\w+\\)\\s+)?\\w+"
+     :types     "^type\\s+\\w+\\s+(struct|interface)"
+     :imports   "^import\\s+"}
 
-   :php
-   {:functions "^\\s*(public|protected|private)?\\s*(static\\s+)?function\\s+\\w+"
-    :types     "^\\s*(abstract\\s+|final\\s+)?(class|interface|trait|enum)\\s+\\w+"
-    :imports   "^\\s*(use|require|require_once|include|include_once)\\s+"}})
+    :php
+    {:functions "^\\s*(public|protected|private)?\\s*(static\\s+)?function\\s+\\w+"
+     :types     "^\\s*(abstract\\s+|final\\s+)?(class|interface|trait|enum)\\s+\\w+"
+     :imports   "^\\s*(use|require|require_once|include|include_once)\\s+"}
+
+    :java
+    {:functions "^\\s*(public|protected|private)?\\s*(static\\s+)?(synchronized\\s+)?(abstract\\s+)?[\\w<>\\[\\],\\s]+\\s+\\w+\\s*\\("
+     :types     "^\\s*(public|protected|private)?\\s*(static\\s+)?(abstract\\s+|final\\s+)?(class|interface|enum|record|@interface)\\s+\\w+"
+     :imports   "^import\\s+"}}))
+
+(defn register-lang!
+  "Register grep patterns for a new language. Extends spai to support any language.
+   patterns is a map with keys :functions, :types, :imports (and optionally :impls, :mods)."
+  [lang patterns]
+  (swap! lang-patterns assoc lang patterns))
 
 (defn- detect-lang
   "Detect primary language from file extensions in path."
@@ -120,6 +133,7 @@
           (str/ends-with? name ".py")                           :python
           (str/ends-with? name ".go")                           :go
           (str/ends-with? name ".php")                          :php
+          (str/ends-with? name ".java")                         :java
           :else                                                 :rust))
       ;; Directory - sample first 100 files
       (let [files (->> (file-seq f)
@@ -135,6 +149,7 @@
           (some #(str/ends-with? % ".py") files)                :python
           (some #(str/ends-with? % ".go") files)                :go
           (some #(str/ends-with? % ".php") files)              :php
+          (some #(str/ends-with? % ".java") files)             :java
           :else                                                 :rust)))))
 
 ;; -------------------------------------------------------------------
@@ -150,6 +165,7 @@
     :python     (second (re-find #"def\s+(\w+)" text))
     :go         (second (re-find #"func\s+(?:\([^)]+\)\s+)?(\w+)" text))
     :php        (second (re-find #"function\s+(\w+)" text))
+    :java       (second (re-find #"(\w+)\s*\(" text))
     nil))
 
 (defn- extract-type-name [text]
