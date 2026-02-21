@@ -9,9 +9,9 @@
 ;;   3. Outputs EDN
 ;;   4. Optional: EDN metadata map after shebang (readable by `spai plugins`)
 ;;
-;; Usage:  spai new-plugin <name> [project|user]
+;; Usage:  spai new-plugin <name> [project|user|repo]
 
-{:spai/args    "<name> [project|user]"
+{:spai/args    "<name> [project|user|repo]"
  :spai/returns "scaffold a new plugin (default: project)"
  :spai/example "spai new-plugin sparql-templates project"}
 
@@ -25,10 +25,11 @@
 (def scope (or (second args) "project"))
 
 (when (or (nil? plugin-name) (contains? #{"--help" "-h"} plugin-name))
-  (println "Usage: spai new-plugin <name> [project|user]")
+  (println "Usage: spai new-plugin <name> [project|user|repo]")
   (println)
   (println "  project  → .spai/plugins/spai-<name>  (default, committed with your repo)")
   (println "  user     → ~/.local/share/spai/plugins/spai-<name>  (global, all projects)")
+  (println "  repo     → plugins/spai-<name> + install-plugins.bb  (standalone plugin repo)")
   (System/exit 0))
 
 (def target-dir
@@ -44,7 +45,8 @@
                     (.exists (io/file d ".spai")) (str (.getPath d) "/.spai/plugins")
                     (.exists (io/file d ".git"))  (str (.getPath d) "/.spai/plugins")
                     :else (recur (.getParentFile d)))))
-    (do (println (str "Unknown scope: " scope ". Use 'project' or 'user'."))
+    "repo"    (str (System/getProperty "user.dir") "/plugins")
+    (do (println (str "Unknown scope: " scope ". Use 'project', 'user', or 'repo'."))
         (System/exit 1))))
 
 (def target-file (io/file target-dir (str "spai-" plugin-name)))
@@ -90,6 +92,50 @@
 (spit target-file skeleton)
 (.setExecutable target-file true)
 
-(pp/pprint {:created (.getPath target-file)
-            :scope   scope
-            :run     (str "spai " plugin-name)})
+;; For repo scope, also generate install-plugins.bb
+(when (= scope "repo")
+  (let [cwd          (System/getProperty "user.dir")
+        install-file (io/file cwd "install-plugins.bb")
+        install-src  "#!/usr/bin/env bb
+;; Install plugins into spai's user plugin directory.
+;; Creates symlinks — the source of truth stays in this repo.
+;; Safe: won't overwrite existing plugins with different names.
+
+(require '[babashka.fs :as fs])
+
+(let [plugin-dir (str (or (System/getenv \"XDG_DATA_HOME\")
+                          (str (System/getenv \"HOME\") \"/.local/share\"))
+                      \"/spai/plugins\")
+      script-dir (str (fs/parent (fs/real-path *file*)))]
+
+  (when-not (fs/directory? plugin-dir)
+    (println \"spai plugin dir not found:\" plugin-dir)
+    (println \"Install spai first: https://github.com/Semantic-partners/spai\")
+    (System/exit 1))
+
+  (doseq [plugin (fs/glob script-dir \"plugins/spai-*\")
+          :let [name   (str (fs/file-name plugin))
+                target (fs/path plugin-dir name)]]
+    (cond
+      (fs/sym-link? target)
+      (do (fs/delete target)
+          (fs/create-sym-link target plugin)
+          (println \"  updated:\" name))
+
+      (fs/exists? target)
+      (println \"  skipped:\" name \"(already exists as regular file)\")
+
+      :else
+      (do (fs/create-sym-link target plugin)
+          (println \"  linked: \" name))))
+
+  (println \"done. run 'spai plugins' to verify.\"))
+"]
+    (spit install-file install-src)
+    (.setExecutable install-file true)))
+
+(pp/pprint (cond-> {:created (.getPath target-file)
+                     :scope   scope
+                     :run     (str "spai " plugin-name)}
+             (= scope "repo")
+             (assoc :install "install-plugins.bb")))
