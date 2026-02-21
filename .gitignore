@@ -1,3 +1,14 @@
 usage.log
 TODO.local.md
 .version
+
+# Memory plugins (separate repo, not public yet)
+plugins/spai-memory
+plugins/spai-remember
+plugins/spai-remember-batch
+plugins/spai-supersede
+plugins/spai-concept
+
+# Domain plugins (live in sp-sr-sq)
+plugins/spai-drug-map
+plugins/spai-organ-risk
