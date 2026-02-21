@@ -1,11 +1,15 @@
-;; spai/git — changes, related, diff, diff-shape, narrative, drift
-;; Git history analysis commands.
+(ns spai.git
+  "Git history analysis: changes, related, diff, diff-shape, narrative, drift."
+  (:require [spai.core :as core]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.set :as set]))
 
 (defn changes
   "Recent git changes for a path. Shows commits and files touched."
   [path n]
   (let [n   (or n 5)
-        raw (sh "git" "log" (str "-" n)
+        raw (core/sh "git" "log" (str "-" n)
                  "--pretty=format:%H|%an|%s|%ar"
                  "--name-only" "--" path)]
     (when raw
@@ -33,12 +37,12 @@
         file-basename (.getName (io/file file))
         file-suffix   (when (str/starts-with? file "/")
                         ;; git diff-tree returns repo-relative paths, so strip to match
-                        (let [git-root (str/trim (or (sh "git" "rev-parse" "--show-toplevel") ""))]
+                        (let [git-root (str/trim (or (core/sh "git" "rev-parse" "--show-toplevel") ""))]
                           (when (and (seq git-root) (str/starts-with? file git-root))
                             (subs file (inc (count git-root))))))
         self?         (fn [f] (or (= f file) (= f file-suffix)
                                   (and file-suffix (str/ends-with? f file-suffix))))
-        raw           (sh "git" "log" (str "-" n) "--pretty=format:%H" "--" file)]
+        raw           (core/sh "git" "log" (str "-" n) "--pretty=format:%H" "--" file)]
     (if-not raw
       {:file file :error "No git history found for this file"}
       (let [commits    (->> (str/split-lines raw)
@@ -47,7 +51,7 @@
             total      (count commits)
             co-changes (->> commits
                             (mapcat (fn [hash]
-                                      (when-let [files-raw (sh "git" "diff-tree" "--no-commit-id"
+                                      (when-let [files-raw (core/sh "git" "diff-tree" "--no-commit-id"
                                                                "-r" "--name-only" hash)]
                                         (let [files (->> (str/split-lines files-raw)
                                                          (remove str/blank?)
@@ -93,7 +97,7 @@
   "Actual diff content for recent changes to a file. What changed, not just that it changed."
   [file n]
   (let [n   (or n 3)
-        raw (sh "git" "log" (str "-" n) "--pretty=format:%H|%an|%s|%ar" "--" file)]
+        raw (core/sh "git" "log" (str "-" n) "--pretty=format:%H|%an|%s|%ar" "--" file)]
     (when raw
       (let [commits (->> (str/split-lines raw)
                          (remove str/blank?)
@@ -101,7 +105,7 @@
                                  (let [parts (str/split line #"\|" 4)]
                                    (when (>= (count parts) 4)
                                      (let [hash (nth parts 0)
-                                           diff-raw (sh "git" "diff" (str hash "^") hash "--" file)]
+                                           diff-raw (core/sh "git" "diff" (str hash "^") hash "--" file)]
                                        {:hash    (subs hash 0 (min 8 (count hash)))
                                         :author  (nth parts 1)
                                         :message (nth parts 2)
@@ -115,12 +119,12 @@
 ;; diff-shape — structural diff between git refs
 ;; -------------------------------------------------------------------
 
-(defn- shape-from-string
+(defn shape-from-string
   "Extract function/type definitions from a content string.
    Returns {:functions [{:name :text}] :types [{:name :kind :text}]}
    Uses the same patterns as shape-raw but works on strings, not files."
   [content lang]
-  (let [pats (get @lang-patterns lang)]
+  (let [pats (get @core/lang-patterns lang)]
     (when pats
       (let [lines (str/split-lines content)
             match-lines (fn [pat-key extract-fn]
@@ -134,11 +138,11 @@
                                                 (extract-fn (str/trim line))))))
                                    vec))))]
         {:functions (or (match-lines :functions
-                          (fn [text] {:name (extract-fn-name text lang)}))
+                          (fn [text] {:name (core/extract-fn-name text lang)}))
                         [])
          :types     (or (match-lines :types
-                          (fn [text] {:name (extract-type-name text)
-                                      :kind (extract-type-kind text)}))
+                          (fn [text] {:name (core/extract-type-name text)
+                                      :kind (core/extract-type-kind text)}))
                         [])}))))
 
 (defn diff-shape
@@ -149,20 +153,20 @@
   (let [ref  (or ref "HEAD~1")
         path (or path ".")
         ;; Compare working tree against ref
-        changed-raw (sh "git" "diff" "--name-only" ref "--" path)
+        changed-raw (core/sh "git" "diff" "--name-only" ref "--" path)
         changed-files (when changed-raw
                         (->> (str/split-lines changed-raw)
                              (remove str/blank?)
-                             (filter #(re-find source-exts %))
+                             (filter #(re-find core/source-exts %))
                              vec))]
     (if (empty? changed-files)
       {:path path :ref ref :changes [] :summary "No structural changes"}
       (let [file-diffs
             (mapv
               (fn [file]
-                (let [lang (detect-lang file)
+                (let [lang (core/detect-lang file)
                       ;; Content at ref (nil if file didn't exist)
-                      old-content (sh "git" "show" (str ref ":" file))
+                      old-content (core/sh "git" "show" (str ref ":" file))
                       ;; Content on disk (nil if deleted)
                       new-content (when (.exists (io/file file))
                                     (slurp file))
@@ -238,7 +242,7 @@
    Compressed story, not raw git log."
   [file & {:keys [n] :or {n 500}}]
   (let [;; Get commit history with stats
-        raw (sh "git" "log" (str "-" n)
+        raw (core/sh "git" "log" (str "-" n)
                 "--pretty=format:%H|%an|%s|%aI"
                 "--numstat" "--" file)]
     (if-not raw
@@ -369,8 +373,8 @@
         ;; Find source files
         files  (->> (file-seq root)
                     (filter #(.isFile %))
-                    (remove #(some skip-dirs (str/split (.getPath %) #"/")))
-                    (filter #(re-find source-exts (.getName %)))
+                    (remove #(some core/skip-dirs (str/split (.getPath %) #"/")))
+                    (filter #(re-find core/source-exts (.getName %)))
                     (mapv #(.getPath %)))
 
         ;; For each file: get co-change partners and import partners

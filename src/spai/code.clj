@@ -1,24 +1,28 @@
-;; spai/code — shape, usages, definition, sig, who, deps, context, patterns
-;; Code structure analysis commands.
+(ns spai.code
+  "Code structure analysis: shape, usages, definition, sig, who, deps, context, patterns."
+  (:require [spai.core :as core]
+            [babashka.process :as p]
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
-(defn- shape-raw
+(defn shape-raw
   "Gather all definitions. Returns flat lists with full detail."
   [path]
-  (let [lang (detect-lang path)
-        pats (get @lang-patterns lang)]
+  (let [lang (core/detect-lang path)
+        pats (get @core/lang-patterns lang)]
     (when pats
       (let [find-matches (fn [pat-key]
                            (when-let [pat (get pats pat-key)]
-                             (grepf pat path)))]
+                             (core/grepf pat path)))]
         {:lang      lang
          :functions (->> (find-matches :functions)
                          (mapv (fn [m]
-                                 (assoc m :name (extract-fn-name (:text m) lang)))))
+                                 (assoc m :name (core/extract-fn-name (:text m) lang)))))
          :types     (->> (find-matches :types)
                          (mapv (fn [m]
                                  (assoc m
-                                        :name (extract-type-name (:text m))
-                                        :kind (extract-type-kind (:text m))))))
+                                        :name (core/extract-type-name (:text m))
+                                        :kind (core/extract-type-kind (:text m))))))
          :impls     (when (:impls pats)
                       (->> (find-matches :impls)
                            (mapv (fn [m]
@@ -49,8 +53,8 @@
               ;; Relativize against cwd if possible, otherwise against the search path
               cwd      (let [p (System/getProperty "user.dir")] (if (str/ends-with? p "/") p (str p "/")))
               abs-path (let [p (.getAbsolutePath (io/file path))] (if (str/ends-with? p "/") p (str p "/")))
-              rel      (fn [file] (let [r (relativize cwd file)]
-                                    (if (= r file) (relativize abs-path file) r)))
+              rel      (fn [file] (let [r (core/relativize cwd file)]
+                                    (if (= r file) (core/relativize abs-path file) r)))
               by-file  (->> all-defs
                             (group-by :file)
                             (into (sorted-map))
@@ -73,13 +77,13 @@
   "Find where a symbol is used. Word-boundary match, excludes lock/json files."
   [symbol path]
   (let [path    (or path ".")
-        type-args (if @has-rg?
+        type-args (if @core/has-rg?
                     ["-g" "*.{rs,clj,cljs,ts,tsx,py,go,php,edn,toml,md}"]
                     ["--include=*.rs" "--include=*.clj" "--include=*.ts"
                      "--include=*.tsx" "--include=*.py" "--include=*.go"
                      "--include=*.php" "--include=*.edn" "--include=*.toml"
                      "--include=*.md"])
-        matches (or (apply grepf symbol path "-w" type-args)
+        matches (or (apply core/grepf symbol path "-w" type-args)
                     [])]
     {:symbol  symbol
      :path    path
@@ -90,24 +94,24 @@
   "Raw pattern search using ripgrep. Supports arbitrary rg flags."
   [pattern & args]
   (let [;; Separate path from flags (path doesn't start with -)
-        [path-args flags] (split-with #(not (clojure.string/starts-with? % "-")) args)
+        [path-args flags] (split-with #(not (str/starts-with? % "-")) args)
         path (or (first path-args) ".")
         ;; Use structured output unless user requests otherwise
         structured? (not (some #{"-l" "--files-with-matches" "-c" "--count" "--no-filename"} flags))]
     (if structured?
       ;; Standard mode - use grepf for structured output
-      (let [matches (or (apply grepf pattern path flags) [])]
+      (let [matches (or (apply core/grepf pattern path flags) [])]
         {:pattern pattern
          :path path
          :count (count matches)
          :matches (vec matches)})
       ;; Pass-through mode - call rg directly, return raw output
       (let [rg-args (concat ["rg"] flags [pattern path])
-            result (apply babashka.process/shell {:out :string :continue true} rg-args)]
+            result (apply p/shell {:out :string :continue true} rg-args)]
         {:pattern pattern
          :path path
          :flags (vec flags)
-         :output (clojure.string/trim-newline (:out result))}))))
+         :output (str/trim-newline (:out result))}))))
 
 (def ^:private def-patterns
   "Patterns that indicate a definition (not just a usage)."
@@ -123,7 +127,7 @@
   "Find where a symbol is defined. Filters usages to definition-site patterns."
   [symbol path]
   (let [path    (or path ".")
-        lang    (detect-lang path)
+        lang    (core/detect-lang path)
         def-pat (get def-patterns lang)
         all     (:matches (usages symbol path))]
     {:symbol symbol
@@ -145,8 +149,8 @@
        :signatures
        (->> (:functions raw)
             (mapv (fn [m]
-                    {:name (extract-fn-name (:text m) (:lang raw))
-                     :file (relativize path (:file m))
+                    {:name (core/extract-fn-name (:text m) (:lang raw))
+                     :file (core/relativize path (:file m))
                      :line (:line m)
                      :sig  (:text m)})))})))
 
@@ -177,7 +181,7 @@
                (subs name 0 dot)
                name)
         ;; Also try path-based module name (e.g., federation/mod -> federation)
-        mod-name (let [rel (relativize (str (.getPath (io/file path)) "/") file)
+        mod-name (let [rel (core/relativize (str (.getPath (io/file path)) "/") file)
                        no-ext (if-let [dot (str/last-index-of rel ".")]
                                 (subs rel 0 dot)
                                 rel)]
@@ -188,7 +192,7 @@
         matches (->> terms
                      distinct
                      (mapcat (fn [term]
-                               (or (grepf term path "-w") [])))
+                               (or (core/grepf term path "-w") [])))
                      ;; Remove self-references
                      (remove #(= (:file %) file))
                      ;; Keep only import-like lines
@@ -222,8 +226,8 @@
   (fn [lang _file-path] lang))
 
 (defmethod extract-imports :rust [_ file-path]
-  (let [use-hits  (or (grepf "^\\s*(pub\\s+)?use\\s+" file-path) [])
-        mod-hits  (or (grepf "^\\s*(pub(\\(crate\\))?\\s+)?mod\\s+\\w+\\s*;" file-path) [])
+  (let [use-hits  (or (core/grepf "^\\s*(pub\\s+)?use\\s+" file-path) [])
+        mod-hits  (or (core/grepf "^\\s*(pub(\\(crate\\))?\\s+)?mod\\s+\\w+\\s*;" file-path) [])
         parse-use (fn [text]
                     (when-let [m (re-find #"use\s+(\S+?)(?:::\{|;)" text)]
                       (second m)))
@@ -239,14 +243,14 @@
                            {:module m :line (:line h) :kind :mod})))))))
 
 (defmethod extract-imports :typescript [_ file-path]
-  (let [hits (or (grepf "^import\\s+" file-path) [])]
+  (let [hits (or (core/grepf "^import\\s+" file-path) [])]
     (->> hits
          (keep (fn [h]
                  (when-let [m (re-find #"from\s+['\"]([^'\"]+)['\"]" (:text h))]
                    {:module (second m) :line (:line h) :kind :import}))))))
 
 (defmethod extract-imports :python [_ file-path]
-  (let [hits (or (grepf "^\\s*(import|from)\\s+" file-path) [])]
+  (let [hits (or (core/grepf "^\\s*(import|from)\\s+" file-path) [])]
     (->> hits
          (keep (fn [h]
                  (let [text (:text h)]
@@ -273,7 +277,7 @@
                         :line (:line h) :kind :import}))))))))
 
 (defmethod extract-imports :php [_ file-path]
-  (let [hits (or (grepf "^\\s*(use|require|require_once|include|include_once)\\s+" file-path) [])]
+  (let [hits (or (core/grepf "^\\s*(use|require|require_once|include|include_once)\\s+" file-path) [])]
     (->> hits
          (keep (fn [h]
                  (let [text (:text h)]
@@ -294,7 +298,7 @@
                         :kind   :require}))))))))
 
 (defmethod extract-imports :java [_ file-path]
-  (let [hits (or (grepf "^import\\s+" file-path) [])]
+  (let [hits (or (core/grepf "^import\\s+" file-path) [])]
     (->> hits
          (keep (fn [h]
                  (when-let [[_ path] (re-find #"import\s+(?:static\s+)?([^;]+)" (:text h))]
@@ -304,7 +308,7 @@
 
 (defmethod extract-imports :default [lang file-path]
   (when-let [ip (get import-patterns lang)]
-    (let [hits (or (grepf (:pattern ip) file-path) [])]
+    (let [hits (or (core/grepf (:pattern ip) file-path) [])]
       (->> hits
            (keep (fn [h]
                    (let [matched (re-find (:extract ip) (:text h))]
@@ -510,7 +514,7 @@
    Directory: full graph with hub/load-bearing analysis."
   [path]
   (let [path (or path ".")
-        lang (detect-lang path)
+        lang (core/detect-lang path)
         f    (io/file path)]
     (if-not (get import-patterns lang)
       {:path path :error "No import patterns for this language yet"}
@@ -518,8 +522,8 @@
                     [(.getCanonicalPath f)]
                     (->> (file-seq f)
                          (filter #(.isFile %))
-                         (remove #(some skip-dirs (str/split (.getPath %) #"/")))
-                         (filter #(re-find source-exts (.getName %)))
+                         (remove #(some core/skip-dirs (str/split (.getPath %) #"/")))
+                         (filter #(re-find core/source-exts (.getName %)))
                          (map #(.getCanonicalPath %))
                          sort))
             project-root (find-project-root lang (or (first files) path))
@@ -608,14 +612,14 @@
    'called from handle_query, plan_step, and execute_bridge.'"
   [symbol path]
   (let [path    (or path ".")
-        lang    (detect-lang path)
-        fn-pat  (get-in @lang-patterns [lang :functions])
+        lang    (core/detect-lang path)
+        fn-pat  (get-in @core/lang-patterns [lang :functions])
         matches (:matches (usages symbol path))]
     (if-not fn-pat
       {:symbol symbol :path path :matches matches}
       ;; For each match, find the nearest preceding function definition in the same file
       (let [;; Get all function definitions
-            all-fns (->> (grepf fn-pat path)
+            all-fns (->> (core/grepf fn-pat path)
                          (group-by :file))
             ;; For each usage, find the enclosing function
             enriched (->> matches
@@ -627,7 +631,7 @@
                                                        (sort-by :line >)
                                                        first)]
                                     (assoc m :in (when enclosing
-                                                   (extract-fn-name (:text enclosing) lang)))))))]
+                                                   (core/extract-fn-name (:text enclosing) lang)))))))]
         {:symbol   symbol
          :path     path
          :count    (count enriched)
@@ -683,8 +687,8 @@
             ;; File naming conventions
             files  (->> (file-seq (io/file path))
                         (filter #(.isFile %))
-                        (remove #(some skip-dirs (str/split (.getPath %) #"/")))
-                        (filter #(re-find source-exts (.getName %)))
+                        (remove #(some core/skip-dirs (str/split (.getPath %) #"/")))
+                        (filter #(re-find core/source-exts (.getName %)))
                         (map #(.getName %)))
             file-patterns (->> files
                                (keep #(second (re-find #"^(.+?)[_.]" %)))

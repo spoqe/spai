@@ -1,25 +1,23 @@
-;; spai/core — shell helpers, grep, language detection, name extraction
-;; Loaded first. Everything else depends on this.
-
-(require '[babashka.process :as p]
-         '[cheshire.core :as json]
-         '[clojure.pprint :as pp]
-         '[clojure.set :as set]
-         '[clojure.string :as str]
-         '[clojure.java.io :as io])
+(ns spai.core
+  "Shell helpers, grep, language detection, name extraction.
+   Foundation module — everything else depends on this."
+  (:require [babashka.process :as p]
+            [cheshire.core :as json]
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
 ;; -------------------------------------------------------------------
 ;; Shell & grep
 ;; -------------------------------------------------------------------
 
-(defn- sh
+(defn sh
   "Shell out, return stdout string. Returns nil on non-zero exit."
   [& cmd]
   (let [{:keys [exit out]} (apply p/shell {:out :string :err :string :continue true} cmd)]
     (when (zero? exit)
       (str/trim out))))
 
-(def ^:private has-rg?
+(def has-rg?
   "Check once at startup whether rg is available."
   (delay
     (zero? (:exit (p/shell {:out :string :err :string :continue true} "which" "rg")))))
@@ -45,7 +43,7 @@
              :text (str/trim (get-in d [:lines :text] ""))})))
       (catch Exception _ nil))))
 
-(defn- grepf
+(defn grepf
   "Search for pattern in path. Prefers rg when available, falls back to grep.
    Returns seq of {:file :line :text} maps."
   [pattern path & extra-args]
@@ -72,7 +70,7 @@
 ;; -------------------------------------------------------------------
 
 (def lang-patterns
-  "Language → grep patterns registry. Open for extension via register-lang!."
+  "Language -> grep patterns registry. Open for extension via register-lang!."
   (atom
    {:rust
     {:functions "^\\s*pub(\\(crate\\))?\\s*(async\\s+)?fn\\s+\\w+"
@@ -117,7 +115,7 @@
   [lang patterns]
   (swap! lang-patterns assoc lang patterns))
 
-(defn- detect-lang
+(defn detect-lang
   "Detect primary language from file extensions in path."
   [path]
   (let [f (io/file path)]
@@ -156,7 +154,7 @@
 ;; Name extraction
 ;; -------------------------------------------------------------------
 
-(defn- extract-fn-name [text lang]
+(defn extract-fn-name [text lang]
   (case lang
     :rust       (second (re-find #"fn\s+(\w+)" text))
     :typescript (or (second (re-find #"function\s+(\w+)" text))
@@ -168,10 +166,10 @@
     :java       (second (re-find #"(\w+)\s*\(" text))
     nil))
 
-(defn- extract-type-name [text]
+(defn extract-type-name [text]
   (second (re-find #"(?:struct|enum|trait|class|interface|type|protocol|record)\s+(\w+)" text)))
 
-(defn- extract-type-kind [text]
+(defn extract-type-kind [text]
   (cond
     (re-find #"\bstruct\b" text)    :struct
     (re-find #"\benum\b" text)      :enum
@@ -183,19 +181,19 @@
     (re-find #"\brecord\b" text)    :record
     :else                           :unknown))
 
-(defn- relativize
+(defn relativize
   "Strip common prefix from file path for cleaner output."
   [path file]
   (if (str/starts-with? file path)
     (subs file (count path))
     file))
 
-(def ^:private skip-dirs
+(def skip-dirs
   "Directories to skip in layout/overview. Universal across projects."
   #{"node_modules" "target" ".git" "__pycache__" ".next" "dist" "build"
     ".svn" "vendor" ".gradle" ".idea" ".vscode" "coverage" ".mypy_cache"
     ".pytest_cache" "venv" ".venv" "env" ".tox" ".eggs"})
 
-(def ^:private source-exts
+(def source-exts
   "Source file extensions we care about."
   #"\.(rs|ts|tsx|js|jsx|py|go|clj|cljs|java|rb|php)$")

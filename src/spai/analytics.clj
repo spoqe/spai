@@ -1,5 +1,8 @@
-;; spai/analytics — usage logging, stats, reflection
-;; Self-awareness. What gets used? What's missing?
+(ns spai.analytics
+  "Usage logging, stats, reflection.
+   Self-awareness. What gets used? What's missing?"
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]))
 
 (def ^:private log-file
   "Append-only usage log. EDN records, one per line.
@@ -13,7 +16,7 @@
    week of real use to see what we actually need."
   100000)
 
-(defn- log-usage!
+(defn log-usage!
   "Append a usage record to the log. Truncates to most recent entries when over limit."
   [command args result-summary]
   (try
@@ -61,7 +64,7 @@
 ;; Plugin discovery
 ;; -------------------------------------------------------------------
 
-(defn- discover-plugins
+(defn discover-plugins
   "Find plugins on PATH (project + user). Returns seq of {:name :path :scope}."
   []
   (let [path-dirs (str/split (or (System/getenv "PATH") "") #":")
