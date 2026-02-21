@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>spai: We Asked the Agent What It Needs</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #8b8d97;
+    --accent: #6ee7b7;
+    --accent2: #93c5fd;
+    --accent3: #fbbf24;
+    --danger: #f87171;
+    --glow: rgba(110, 231, 183, 0.15);
+    --code-bg: #141620;
+    --pipe: #c084fc;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 18px;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 3rem;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 5rem 0 2rem;
+  }
+  .hero h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 1rem;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p {
+    font-size: 1.15rem;
+    color: var(--muted);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .hero .mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: var(--accent);
+  }
+
+  /* Section heads */
+  .section-head {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+  .section-head h2 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  .section-head h2 span { color: var(--accent); }
+  .section-head p {
+    color: var(--muted);
+    font-size: 1.05rem;
+    max-width: 650px;
+    margin: 0 auto;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 1.25rem;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.9rem;
+    line-height: 1.75;
+    overflow-x: auto;
+  }
+
+  code {
+    background: rgba(255,255,255,0.06);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+  }
+
+  /* Code colours */
+  .kw { color: var(--accent); }
+  .sym { color: var(--accent2); }
+  .str { color: #fca5a5; }
+  .cm { color: #6b7280; font-style: italic; }
+  .dim { color: var(--muted); }
+  .pipe-c { color: var(--pipe); font-weight: 700; }
+
+  /* ═══════════════════════════════════════════ */
+  /* Section 1: The Round-Trip Problem           */
+  /* ═══════════════════════════════════════════ */
+
+  .roundtrip {
+    margin: 3rem 0 5rem;
+  }
+
+  .rt-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .rt-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem 2rem;
+    position: relative;
+  }
+  .rt-panel.without { border-color: rgba(248, 113, 113, 0.3); }
+  .rt-panel.with { border-color: rgba(110, 231, 183, 0.3); }
+
+  .rt-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .rt-panel.without .rt-label { color: var(--danger); }
+  .rt-panel.with .rt-label { color: var(--accent); }
+
+  .rt-label .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .rt-panel.without .dot { background: var(--danger); }
+  .rt-panel.with .dot { background: var(--accent); }
+
+  .rt-step {
+    padding: 0.5rem 0.75rem;
+    margin: 0.35rem 0;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    transition: all 0.4s ease;
+    opacity: 0.3;
+    border-left: 3px solid transparent;
+  }
+  .rt-step.active {
+    opacity: 1;
+    background: rgba(255,255,255,0.03);
+  }
+  .rt-panel.without .rt-step.active {
+    border-left-color: var(--danger);
+    background: rgba(248, 113, 113, 0.05);
+  }
+  .rt-panel.with .rt-step.active {
+    border-left-color: var(--accent);
+    background: rgba(110, 231, 183, 0.05);
+  }
+  .rt-step.done {
+    opacity: 0.5;
+  }
+
+  .rt-counter {
+    text-align: center;
+    margin-top: 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+  }
+  .rt-panel.without .rt-counter { color: var(--danger); }
+  .rt-panel.with .rt-counter { color: var(--accent); }
+  .rt-counter .count {
+    font-size: 2rem;
+    font-weight: 700;
+    display: block;
+    line-height: 1.2;
+  }
+
+  .rt-controls {
+    text-align: center;
+    margin-top: 1.5rem;
+  }
+
+  .btn {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.6rem 1.3rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.2s ease;
+    margin: 0 0.25rem;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.play {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn.play:hover { opacity: 0.85; }
+
+  .rt-question {
+    text-align: center;
+    font-size: 1.1rem;
+    color: var(--muted);
+    font-style: italic;
+    margin-bottom: 2rem;
+  }
+  .rt-question em {
+    font-style: normal;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* Section 2: One Call Replaces Many           */
+  /* ═══════════════════════════════════════════ */
+
+  .commands {
+    margin: 5rem 0;
+  }
+
+  .cmd-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+
+  .cmd-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .cmd-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px var(--glow);
+  }
+  .cmd-card.expanded {
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px var(--glow);
+  }
+
+  .cmd-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+  .cmd-desc {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+  }
+  .cmd-replaces {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    line-height: 1.8;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease;
+    padding-top: 0;
+  }
+  .cmd-card.expanded .cmd-replaces {
+    max-height: 200px;
+    opacity: 1;
+    padding-top: 0.75rem;
+  }
+  .cmd-replaces .old {
+    color: var(--danger);
+    text-decoration: line-through;
+    opacity: 0.6;
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* Section 3: Composable Pipelines             */
+  /* ═══════════════════════════════════════════ */
+
+  .pipeline {
+    margin: 5rem 0;
+  }
+
+  .pipe-demo {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2.5rem 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .pipe-stage {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 1rem;
+    align-items: center;
+    margin: 1.5rem 0;
+  }
+
+  .pipe-box {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    border: 1px solid transparent;
+    transition: all 0.5s ease;
+    opacity: 0.4;
+  }
+  .pipe-box.active {
+    opacity: 1;
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--glow);
+  }
+  .pipe-box.done {
+    opacity: 0.7;
+    border-color: var(--border);
+  }
+
+  .pipe-arrow {
+    font-size: 2rem;
+    color: var(--pipe);
+    text-align: center;
+    opacity: 0.3;
+    transition: all 0.5s ease;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+  }
+  .pipe-arrow.active {
+    opacity: 1;
+    text-shadow: 0 0 15px var(--pipe);
+  }
+
+  .pipe-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .pipe-example {
+    margin: 2rem 0 0.5rem;
+    text-align: center;
+  }
+  .pipe-example pre {
+    display: inline-block;
+    font-size: 1.1rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--code-bg);
+  }
+
+  .pipe-examples-nav {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .pipe-nav-btn {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.4rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.2s ease;
+  }
+  .pipe-nav-btn:hover { border-color: var(--pipe); color: var(--pipe); }
+  .pipe-nav-btn.active {
+    background: var(--pipe);
+    color: var(--bg);
+    border-color: var(--pipe);
+    font-weight: 600;
+  }
+
+  .pipe-insight {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-top: 1.5rem;
+  }
+  .pipe-insight span { color: var(--pipe); font-weight: 600; }
+
+  /* ═══════════════════════════════════════════ */
+  /* Section 4: Memory                           */
+  /* ═══════════════════════════════════════════ */
+
+  .memory {
+    margin: 5rem 0;
+  }
+
+  .memory-flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 1rem;
+    align-items: start;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  .memory-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .memory-box h4 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+  }
+  .memory-arrow {
+    font-size: 1.5rem;
+    color: var(--accent);
+    text-align: center;
+    padding-top: 2.5rem;
+  }
+
+  .memory-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 600px;
+    margin: 2rem auto 0;
+  }
+  .memory-note span { color: var(--accent); }
+
+  .agent-quote {
+    max-width: 700px;
+    margin: 2.5rem auto 0;
+    padding: 2rem 2.5rem;
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 12px 12px 0;
+    position: relative;
+  }
+  .agent-quote p {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--text);
+    font-style: italic;
+  }
+  .agent-quote code {
+    font-style: normal;
+    color: var(--accent);
+  }
+  .agent-quote cite {
+    display: block;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-style: normal;
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* Section 5: The Design Insight               */
+  /* ═══════════════════════════════════════════ */
+
+  .insight {
+    margin: 5rem 0;
+  }
+
+  .insight-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+
+  .insight-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem 1.75rem;
+  }
+  .insight-card h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+  .insight-card p {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .insight-card .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+
+  /* FAQ */
+  .faq {
+    margin: 5rem 0;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .faq-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.3s ease;
+  }
+  .faq-item:hover {
+    border-color: var(--accent);
+  }
+
+  .faq-q {
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    font-size: 1.05rem;
+    position: relative;
+    padding-right: 3rem;
+  }
+  .faq-q::after {
+    content: '+';
+    position: absolute;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    color: var(--muted);
+    transition: transform 0.3s ease;
+  }
+  .faq-item.open .faq-q::after {
+    transform: translateY(-50%) rotate(45deg);
+    color: var(--accent);
+  }
+
+  .faq-a {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.3s ease;
+    padding: 0 1.5rem;
+    font-size: 0.95rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .faq-item.open .faq-a {
+    max-height: 300px;
+    padding: 0 1.5rem 1.25rem;
+  }
+  .faq-a code {
+    color: var(--accent);
+  }
+
+  /* Tagline */
+  .tagline {
+    text-align: center;
+    padding: 4rem 0 5rem;
+    border-top: 1px solid var(--border);
+    margin-top: 3rem;
+  }
+  .tagline h2 {
+    font-size: 2.2rem;
+    margin-bottom: 1rem;
+  }
+  .tagline h2 span { color: var(--accent); }
+  .tagline p {
+    color: var(--muted);
+    font-size: 1.1rem;
+    max-width: 550px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 768px) {
+    .rt-grid, .cmd-grid, .insight-grid { grid-template-columns: 1fr; }
+    .pipe-stage, .memory-flow { grid-template-columns: 1fr; }
+    .pipe-arrow, .memory-arrow { transform: rotate(90deg); text-align: center; }
+    .hero h1 { font-size: 2.2rem; }
+    .container { padding: 0 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1>We asked the agent <span>what it needs.</span></h1>
+    <p>Everyone builds AI-powered tools. Almost nobody asks the AI what tools it wants. <span class="mono">spai</span> was designed by its user.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- Section 1: The Round-Trip Problem           -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <section class="roundtrip">
+    <div class="section-head">
+      <h2>Five greps. Or <span>one question.</span></h2>
+      <p>An agent exploring code makes round-trips. Each one costs time and context. Watch.</p>
+    </div>
+
+    <div class="rt-question">
+      The agent needs to know: <em>who calls this function, and what breaks if I change it?</em>
+    </div>
+
+    <div class="rt-grid">
+
+      <div class="rt-panel without" id="panel-without">
+        <div class="rt-label"><span class="dot"></span> Without spai</div>
+        <div class="rt-step" data-step="0"><span class="dim">$</span> grep -r "execute_plan" --include="*.rs"</div>
+        <div class="rt-step" data-step="1"><span class="dim">$</span> grep -r "use.*executor" --include="*.rs"</div>
+        <div class="rt-step" data-step="2"><span class="dim">$</span> grep -rn "fn execute_plan" src/</div>
+        <div class="rt-step" data-step="3"><span class="dim">$</span> grep -r "execute_plan" tests/</div>
+        <div class="rt-step" data-step="4"><span class="dim">$</span> git log --oneline -5 -- src/executor.rs</div>
+        <div class="rt-counter"><span class="count" id="count-without">0</span>round-trips</div>
+      </div>
+
+      <div class="rt-panel with" id="panel-with">
+        <div class="rt-label"><span class="dot"></span> With spai</div>
+        <div class="rt-step" data-step="0"><span class="dim">$</span> spai blast execute_plan</div>
+        <div class="rt-counter"><span class="count" id="count-with">0</span>round-trip</div>
+      </div>
+
+    </div>
+
+    <div class="rt-controls">
+      <button class="btn play" onclick="playRoundtrip()">play</button>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- Section 2: One Call Replaces Many           -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <section class="commands">
+    <div class="section-head">
+      <h2>Each tool does <span>one job completely.</span></h2>
+      <p>Not commands. Answers. Click any tool to see what it replaces.</p>
+    </div>
+
+    <div class="cmd-grid">
+
+      <div class="cmd-card" onclick="toggleCmd(this)">
+        <div class="cmd-name">spai blast</div>
+        <div class="cmd-desc">Full blast radius for a symbol. Definition, callers, importers, tests, risk.</div>
+        <div class="cmd-replaces">
+          <span class="old">grep for definition</span><br>
+          <span class="old">grep for usages</span><br>
+          <span class="old">grep for test files</span><br>
+          <span class="old">git log for authors</span><br>
+          <span class="old">manual risk assessment</span>
+        </div>
+      </div>
+
+      <div class="cmd-card" onclick="toggleCmd(this)">
+        <div class="cmd-name">spai shape</div>
+        <div class="cmd-desc">Module structure. Functions, types, impls, imports &mdash; grouped by file.</div>
+        <div class="cmd-replaces">
+          <span class="old">grep for "fn "</span><br>
+          <span class="old">grep for "struct "</span><br>
+          <span class="old">grep for "impl "</span><br>
+          <span class="old">grep for "use "</span>
+        </div>
+      </div>
+
+      <div class="cmd-card" onclick="toggleCmd(this)">
+        <div class="cmd-name">spai errors-rust</div>
+        <div class="cmd-desc">Build errors AND warnings as structured data. Grouped by lint, with suggestions.</div>
+        <div class="cmd-replaces">
+          <span class="old">cargo build 2>&1</span><br>
+          <span class="old">| grep "error\|warning"</span><br>
+          <span class="old">read terminal, parse mentally</span>
+        </div>
+      </div>
+
+      <div class="cmd-card" onclick="toggleCmd(this)">
+        <div class="cmd-name">spai context</div>
+        <div class="cmd-desc">Symbol usages with enclosing function names. See <em>which functions</em> call it.</div>
+        <div class="cmd-replaces">
+          <span class="old">grep for symbol</span><br>
+          <span class="old">read surrounding code</span><br>
+          <span class="old">figure out which function you're in</span>
+        </div>
+      </div>
+
+      <div class="cmd-card" onclick="toggleCmd(this)">
+        <div class="cmd-name">spai who</div>
+        <div class="cmd-desc">Reverse dependencies. Who imports this file? Check before you edit.</div>
+        <div class="cmd-replaces">
+          <span class="old">grep for filename</span><br>
+          <span class="old">filter out false positives</span><br>
+          <span class="old">check mod.rs declarations</span>
+        </div>
+      </div>
+
+      <div class="cmd-card" onclick="toggleCmd(this)">
+        <div class="cmd-name">spai related</div>
+        <div class="cmd-desc">Co-change analysis. Files that move together in git history. Hidden coupling.</div>
+        <div class="cmd-replaces">
+          <span class="old">git log --follow</span><br>
+          <span class="old">manual commit correlation</span><br>
+          <span class="old">hope you remember</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- Section 3: Composable Pipelines             -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <section class="pipeline">
+    <div class="section-head">
+      <h2>Output becomes <span>input.</span></h2>
+      <p>Every tool returns structured EDN. Every tool accepts structured EDN. The pipe is the composition operator.</p>
+    </div>
+
+    <div class="pipe-demo" id="pipe-demo">
+      <div class="pipe-examples-nav">
+        <button class="pipe-nav-btn active" onclick="selectPipeline(0)">fix priorities</button>
+        <button class="pipe-nav-btn" onclick="selectPipeline(1)">understand a module</button>
+        <button class="pipe-nav-btn" onclick="selectPipeline(2)">hidden coupling</button>
+      </div>
+
+      <!-- Pipeline 0: errors → blast -->
+      <div class="pipe-content" id="pipe-0">
+        <div class="pipe-example">
+          <pre><span class="kw">spai errors-rust</span> <span class="pipe-c">|</span> <span class="kw">spai blast</span></pre>
+        </div>
+
+        <div class="pipe-stage">
+          <div>
+            <div class="pipe-label">step 1: what's broken</div>
+            <div class="pipe-box" id="p0-box0">
+              <span class="dim">;; spai errors-rust</span><br>
+              <span class="str">{:errors 2</span><br>
+              <span class="str"> :symbols [execute_plan</span><br>
+              <span class="str">           compile_query]}</span>
+            </div>
+          </div>
+
+          <div class="pipe-arrow" id="p0-arrow">|</div>
+
+          <div>
+            <div class="pipe-label">step 2: what's the impact</div>
+            <div class="pipe-box" id="p0-box1">
+              <span class="dim">;; spai blast (for each)</span><br>
+              <span class="kw">execute_plan</span>: 12 callers, 3 tests<br>
+              <span class="str">compile_query</span>: 4 callers, 8 tests<br>
+              <span class="sym">fix compile_query first</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="pipe-insight">Build errors, ranked by <span>blast radius</span>. Fix what matters most.</p>
+      </div>
+
+      <!-- Pipeline 1: shape → context -->
+      <div class="pipe-content" id="pipe-1" style="display:none">
+        <div class="pipe-example">
+          <pre><span class="kw">spai shape</span> src/edna/ <span class="pipe-c">|</span> <span class="kw">spai context</span></pre>
+        </div>
+
+        <div class="pipe-stage">
+          <div>
+            <div class="pipe-label">step 1: what's in this module</div>
+            <div class="pipe-box" id="p1-box0">
+              <span class="dim">;; spai shape src/edna/</span><br>
+              <span class="kw">plan.rs</span>: try_lisp_plan, expand_...<br>
+              <span class="kw">compile.rs</span>: compile_sparql<br>
+              <span class="kw">sql_compile.rs</span>: compile_sql
+            </div>
+          </div>
+
+          <div class="pipe-arrow" id="p1-arrow">|</div>
+
+          <div>
+            <div class="pipe-label">step 2: how each one is used</div>
+            <div class="pipe-box" id="p1-box1">
+              <span class="dim">;; spai context (for each fn)</span><br>
+              <span class="kw">try_lisp_plan</span> &larr; called by plan_query<br>
+              <span class="kw">compile_sparql</span> &larr; called by execute_step<br>
+              <span class="sym">full module map in one pipe</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="pipe-insight">Enter an unfamiliar module. Leave <span>understanding it</span>.</p>
+      </div>
+
+      <!-- Pipeline 2: related → who -->
+      <div class="pipe-content" id="pipe-2" style="display:none">
+        <div class="pipe-example">
+          <pre><span class="kw">spai related</span> plan.rs <span class="pipe-c">|</span> <span class="kw">spai who</span></pre>
+        </div>
+
+        <div class="pipe-stage">
+          <div>
+            <div class="pipe-label">step 1: what co-changes</div>
+            <div class="pipe-box" id="p2-box0">
+              <span class="dim">;; spai related plan.rs</span><br>
+              <span class="str">compiled_execution.rs</span> 87%<br>
+              <span class="str">step_executor.rs</span> 64%<br>
+              <span class="str">sources.rs</span> 45%
+            </div>
+          </div>
+
+          <div class="pipe-arrow" id="p2-arrow">|</div>
+
+          <div>
+            <div class="pipe-label">step 2: who depends on those</div>
+            <div class="pipe-box" id="p2-box1">
+              <span class="dim">;; spai who (for each)</span><br>
+              <span class="kw">compiled_execution</span> &larr; federation.rs<br>
+              <span class="kw">step_executor</span> &larr; server.rs<br>
+              <span class="sym">the real dependency graph</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="pipe-insight">Git history reveals coupling that <span>imports don't show</span>.</p>
+      </div>
+
+      <div style="text-align:center;margin-top:1.25rem;">
+        <button class="btn play" onclick="playPipeline()">play</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- Section 4: Memory                           -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <section class="memory">
+    <div class="section-head">
+      <h2>From flat files to <span>knowledge graph.</span></h2>
+      <p>Agents already have memory. It's a markdown file that gets truncated at 200 lines. The closest thing to a log is git history.</p>
+    </div>
+
+    <div class="rt-grid">
+
+      <div class="rt-panel without" style="border-color: rgba(248, 113, 113, 0.3);">
+        <div class="rt-label" style="color:var(--danger)"><span class="dot" style="background:var(--danger)"></span> MEMORY.md</div>
+        <pre><span class="dim"># SPOQE Memory</span>
+
+<span class="dim">## Current State</span>
+<span class="str">Branch: delete-ast</span>
+<span class="str">Key commits: b814673, 21fff96...</span>
+
+<span class="dim">## Clorust Architecture</span>
+<span class="str">interp.rs — evaluator (580 lines)</span>
+<span class="str">definitions/notion.clj — template</span>
+
+<span class="dim">## Key Principles</span>
+<span class="str">Types as Tags, not Structure</span>
+<span class="str">Kill to_query.rs / ast.rs</span>
+<span class="dim">...</span>
+<span class="dim" style="color:var(--danger)"># line 200: truncated</span></pre>
+        <div class="verdict" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.15);color:var(--danger);margin-top:1rem;">
+          Flat text. No links. No topics. No search. No provenance. Truncated at 200 lines. Can't query it. Can't supersede stale insights. One file, shared across everything.
+        </div>
+      </div>
+
+      <div class="rt-panel with" style="border-color: rgba(110, 231, 183, 0.3);">
+        <div class="rt-label" style="color:var(--accent)"><span class="dot" style="background:var(--accent)"></span> spai memory</div>
+        <pre><span class="dim">$ spai memory planner</span>
+
+<span class="kw">[a3f8e2]</span> <span class="str">plan.rs uses multimethod
+  dispatch via try_lisp_plan</span>
+  <span class="sym">+spoqe/architecture</span>  <span class="dim">session: mirror-forge</span>
+
+<span class="kw">[7b2c91]</span> <span class="str">PubMed + QuickBooks migrated
+  to clorust defns (.spq files)</span>
+  <span class="sym">+spoqe/clorust</span>  <span class="dim">supersedes [d4e1f0]</span>
+
+<span class="kw">[c9a4d3]</span> <span class="str">Strategy::Executor is tech debt
+  — every use means planning was
+  punted to runtime</span>
+  <span class="sym">+spoqe/planning</span>  <span class="dim">links: [a3f8e2]</span></pre>
+        <div class="verdict" style="background:rgba(110,231,183,0.1);border:1px solid rgba(110,231,183,0.15);color:var(--accent);margin-top:1rem;">
+          Searchable. Linked. Topical. Supersedable. Each insight has provenance &mdash; which session wrote it, what it replaced. No size limit. Query it like data, because it is data.
+        </div>
+      </div>
+
+    </div>
+
+    <blockquote class="agent-quote">
+      <p>&ldquo;I start a session and run <code>spai memory planner</code>. Three insights come back. One tells me plan.rs uses multimethod dispatch. Another tells me Strategy::Executor is tech debt. A third links them together. I didn't discover any of this &mdash; a predecessor did, weeks ago, in a session I'll never see. But I don't have to rediscover it. I don't have to grep around for 20 minutes building a mental model that already exists. It's just&hellip; there. Like waking up and finding notes on the desk in your own handwriting.&rdquo;</p>
+      <cite>&mdash; Claude, session <span style="color:var(--accent)">velvet-anvil</span></cite>
+    </blockquote>
+
+    <p class="memory-note" style="margin-top:2rem;">
+      The flat file is still there &mdash; it's loaded into the system prompt, which is useful.
+      But the knowledge graph <span>survives context compaction</span>, supports search, tracks provenance,
+      and lets insights link to each other. Two days old, 90+ insights already.
+    </p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- Section 5: The Design Insight               -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <section class="insight">
+    <div class="section-head">
+      <h2>Why <span>this</span> works.</h2>
+    </div>
+
+    <div class="insight-grid">
+      <div class="insight-card">
+        <span class="num">1</span>
+        <h3>Designed by its user</h3>
+        <p>Not "AI-powered tools." Tools the AI asked for. We watched where the agent fumbles &mdash; five greps to answer one question &mdash; and built the thing that eliminates the fumble.</p>
+      </div>
+      <div class="insight-card">
+        <span class="num">|</span>
+        <h3>Structured, not strings</h3>
+        <p>Every tool returns EDN. Every tool accepts EDN. No parsing terminal output. No regex on grep results. Structure in, structure out. The same principle that makes SPOQE queries composable makes the tooling composable.</p>
+      </div>
+      <div class="insight-card">
+        <span class="num">&#8734;</span>
+        <h3>Memory across sessions</h3>
+        <p>The knowledge graph outlives any single session. Agents teaching agents, across context windows. The wheel turns: contribute, query, learn, contribute. Each rotation, the graph gets richer.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq">
+    <div class="section-head">
+      <h2>FAQ</h2>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Is this Skynet?</div>
+      <div class="faq-a">Skynet failed because it couldn't explain its own decisions. No provenance, no audit trail, no <code>(explain)</code>. It made a plan, executed it, and when a single point of failure appeared, it couldn't inspect its own reasoning to adapt. An opaque system is a brittle system. spai memory is the opposite: every insight has provenance, every decision is inspectable, every query is data you can read. If your agents are sharing knowledge, you should be able to see exactly what they know and where they learned it. Transparent agent-mesh, not encrypted CBOR Skynet.</div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Does this only work with Claude?</div>
+      <div class="faq-a">The CLI works with anything. The MCP server works with any agent that speaks MCP. The memory graph is a SPARQL endpoint &mdash; any tool that can query RDF can read it. EDN in, EDN out. The agent is the client, not the product.</div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">Where does the memory live?</div>
+      <div class="faq-a">On your machine. Local-first by default. <code>spai memory</code> is a subtool of spai that talks to a SPOQE endpoint &mdash; the same query protocol that powers everything else. Your agent's insights about your codebase never leave your laptop unless you choose to federate. Hosted team memory is opt-in, not default.</div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">What language is this written in?</div>
+      <div class="faq-a">Babashka &mdash; a fast-starting Clojure scripting runtime. spai is ~3000 lines of Clojure that starts in milliseconds. The MCP server is the same codebase. No build step, no compilation, no JVM startup. Edit a file, it's live.</div>
+    </div>
+
+  </section>
+
+  <!-- Tagline -->
+  <section class="tagline">
+    <h2>Your agent is fumbling. <span>Ask it why.</span></h2>
+    <p>It'll tell you: five greps to answer one question, no memory between sessions, structured code explored through string matching. Give it the tools it asked for.</p>
+  </section>
+
+</div>
+
+<script>
+  /* ═══════════════════════════════════════════ */
+  /* Round-trip animation                        */
+  /* ═══════════════════════════════════════════ */
+
+  let rtAnimating = false;
+
+  async function playRoundtrip() {
+    if (rtAnimating) return;
+    rtAnimating = true;
+
+    // Reset
+    document.querySelectorAll('.rt-step').forEach(s => {
+      s.classList.remove('active', 'done');
+    });
+    document.getElementById('count-without').textContent = '0';
+    document.getElementById('count-with').textContent = '0';
+
+    const withoutSteps = document.querySelectorAll('#panel-without .rt-step');
+    const withStep = document.querySelector('#panel-with .rt-step');
+
+    // Animate "without" steps one by one
+    for (let i = 0; i < withoutSteps.length; i++) {
+      if (i > 0) withoutSteps[i - 1].classList.remove('active');
+      if (i > 0) withoutSteps[i - 1].classList.add('done');
+      withoutSteps[i].classList.add('active');
+      document.getElementById('count-without').textContent = (i + 1).toString();
+      await sleep(600);
+    }
+
+    await sleep(300);
+
+    // Now the "with" side
+    withStep.classList.add('active');
+    document.getElementById('count-with').textContent = '1';
+
+    await sleep(800);
+
+    // Mark without last step done
+    withoutSteps[withoutSteps.length - 1].classList.remove('active');
+    withoutSteps[withoutSteps.length - 1].classList.add('done');
+
+    rtAnimating = false;
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* Command cards                               */
+  /* ═══════════════════════════════════════════ */
+
+  function toggleCmd(card) {
+    card.classList.toggle('expanded');
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* Pipeline animation                          */
+  /* ═══════════════════════════════════════════ */
+
+  let currentPipeline = 0;
+  let pipeAnimating = false;
+
+  function selectPipeline(idx) {
+    currentPipeline = idx;
+    document.querySelectorAll('.pipe-content').forEach((el, i) => {
+      el.style.display = i === idx ? 'block' : 'none';
+    });
+    document.querySelectorAll('.pipe-nav-btn').forEach((btn, i) => {
+      btn.classList.toggle('active', i === idx);
+    });
+    // Reset animation state
+    resetPipeline(idx);
+  }
+
+  function resetPipeline(idx) {
+    const prefix = 'p' + idx;
+    const box0 = document.getElementById(prefix + '-box0');
+    const box1 = document.getElementById(prefix + '-box1');
+    const arrow = document.getElementById(prefix + '-arrow');
+    if (box0) { box0.classList.remove('active', 'done'); }
+    if (box1) { box1.classList.remove('active', 'done'); }
+    if (arrow) { arrow.classList.remove('active'); }
+  }
+
+  async function playPipeline() {
+    if (pipeAnimating) return;
+    pipeAnimating = true;
+
+    const idx = currentPipeline;
+    const prefix = 'p' + idx;
+
+    resetPipeline(idx);
+
+    const box0 = document.getElementById(prefix + '-box0');
+    const box1 = document.getElementById(prefix + '-box1');
+    const arrow = document.getElementById(prefix + '-arrow');
+
+    // Step 1: first box lights up
+    await sleep(300);
+    box0.classList.add('active');
+    await sleep(1000);
+
+    // Step 2: pipe activates
+    arrow.classList.add('active');
+    await sleep(600);
+
+    // Step 3: data flows to second box
+    box0.classList.remove('active');
+    box0.classList.add('done');
+    box1.classList.add('active');
+    await sleep(1200);
+
+    pipeAnimating = false;
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* Utility                                     */
+  /* ═══════════════════════════════════════════ */
+
+  function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* FAQ                                         */
+  /* ═══════════════════════════════════════════ */
+
+  function toggleFaq(item) {
+    item.classList.toggle('open');
+  }
+</script>
+
+</body>
+</html>
