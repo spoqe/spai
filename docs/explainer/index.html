@@ -189,6 +189,20 @@
     line-height: 1.2;
   }
 
+  .rt-pass {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 0.4rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .rt-pass.visible { opacity: 1; }
+  .rt-pass span { color: var(--danger); font-weight: 600; }
+
   .rt-controls {
     text-align: center;
     margin-top: 1.5rem;
@@ -214,6 +228,41 @@
     font-weight: 600;
   }
   .btn.play:hover { opacity: 0.85; }
+
+  .rt-context {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .rt-context-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+    display: flex;
+    justify-content: space-between;
+  }
+  .rt-context-bar {
+    height: 6px;
+    background: var(--code-bg);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .rt-context-fill {
+    height: 100%;
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.6s ease, background 0.3s ease;
+  }
+  .rt-panel.without .rt-context-fill {
+    background: linear-gradient(90deg, var(--accent3), var(--danger));
+  }
+  .rt-panel.with .rt-context-fill {
+    background: var(--accent);
+  }
 
   .rt-question {
     text-align: center;
@@ -242,14 +291,16 @@
   }
   .rt-thinking.visible {
     opacity: 0.7;
-    max-height: 2rem;
+    max-height: 4rem;
+    animation: pulse-think 1.5s ease-in-out infinite;
   }
   @keyframes pulse-think {
     0%, 100% { opacity: 0.4; }
     50%      { opacity: 0.9; }
   }
-  .rt-thinking.visible {
-    animation: pulse-think 1.5s ease-in-out infinite;
+  .rt-thinking.settled {
+    animation: none;
+    opacity: 0.7;
   }
 
   /* ═══════════════════════════════════════════ */
@@ -432,6 +483,135 @@
     margin-top: 1.5rem;
   }
   .pipe-insight span { color: var(--pipe); font-weight: 600; }
+
+  /* ═══════════════════════════════════════════ */
+  /* Section 4: Self-Awareness Loop              */
+  /* ═══════════════════════════════════════════ */
+
+  .loop {
+    margin: 5rem 0;
+  }
+
+  .loop-flow {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2.5rem 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .loop-ring {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin-bottom: 2rem;
+    position: relative;
+  }
+
+  .loop-stage {
+    padding: 1.25rem 1rem;
+    border-radius: 8px;
+    background: var(--code-bg);
+    border: 1px solid transparent;
+    transition: all 0.5s ease;
+    opacity: 0.4;
+    position: relative;
+  }
+  .loop-stage.active {
+    opacity: 1;
+    border-color: var(--accent);
+    box-shadow: 0 0 15px var(--glow);
+  }
+  .loop-stage.done {
+    opacity: 0.7;
+    border-color: var(--border);
+  }
+
+  /* 2x2 grid with arrows forming a loop:
+     DO  →  CHECK
+      ↑        ↓
+     ACT ←  PLAN   */
+  .loop-stage:nth-child(1) { grid-column: 1; grid-row: 1; margin: 0.5rem; }
+  .loop-stage:nth-child(2) { grid-column: 2; grid-row: 1; margin: 0.5rem; }
+  .loop-stage:nth-child(3) { grid-column: 2; grid-row: 2; margin: 0.5rem; }
+  .loop-stage:nth-child(4) { grid-column: 1; grid-row: 2; margin: 0.5rem; }
+
+  .loop-stage .stage-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 0.25rem;
+    display: block;
+  }
+  .loop-stage .stage-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--accent);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+  .loop-stage .stage-desc {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  .loop-arrows {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .loop-arrow {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    color: var(--pipe);
+    opacity: 0.2;
+    transition: all 0.4s ease;
+    font-weight: 700;
+  }
+  .loop-arrow.active {
+    opacity: 1;
+    text-shadow: 0 0 10px var(--pipe);
+  }
+  /* top center: DO → CHECK */
+  .loop-arrow:nth-child(1) { top: 25%; left: 50%; transform: translate(-50%, -50%); }
+  /* right center: CHECK ↓ ACT */
+  .loop-arrow:nth-child(2) { top: 50%; right: 1.5rem; transform: translateY(-50%); }
+  /* bottom center: ACT ← PLAN (← char, no flip needed) */
+  .loop-arrow:nth-child(3) { bottom: 25%; left: 50%; transform: translate(-50%, 50%); }
+  /* left center: PLAN ↑ DO (↑ char, no flip needed) */
+  .loop-arrow:nth-child(4) { top: 50%; left: 1.5rem; transform: translateY(-50%); }
+
+  .loop-example {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.75;
+    margin-top: 1.5rem;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.5s ease;
+  }
+  .loop-example.visible {
+    opacity: 1;
+    max-height: 400px;
+  }
+
+  .loop-insight {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-top: 1.5rem;
+  }
+  .loop-insight span { color: var(--pipe); font-weight: 600; }
 
   /* ═══════════════════════════════════════════ */
   /* Section 5: The Design Insight               */
@@ -620,7 +800,7 @@
   <section class="roundtrip">
     <div class="section-head">
       <h2>Five greps. Or <span>one question.</span></h2>
-      <p>An agent exploring code makes round-trips. Each one costs time and context. Watch.</p>
+      <p>An agent exploring code makes round-trips. Then does it again. And again. Watch.</p>
     </div>
 
     <div class="rt-question">
@@ -644,13 +824,34 @@
         <div class="rt-step done" data-step="3"><span class="dim">$</span> grep -r "execute_plan" tests/</div>
         <div class="rt-thinking" id="think-3">thinking &mdash; who touched this recently?</div>
         <div class="rt-step done" data-step="4"><span class="dim">$</span> git log --oneline -5 -- src/executor.rs</div>
+        <div class="rt-thinking" id="think-4">thinking &mdash; OK, assembling all of that into an answer...</div>
         <div class="rt-counter"><span class="count" id="count-without">5</span>round-trips</div>
+        <div class="rt-pass" id="pass-label">same chain, <span>again</span></div>
+        <div class="rt-context">
+          <div class="rt-context-label">
+            <span>context window</span>
+            <span id="ctx-without-pct">0%</span>
+          </div>
+          <div class="rt-context-bar">
+            <div class="rt-context-fill" id="ctx-without-fill"></div>
+          </div>
+        </div>
       </div>
 
       <div class="rt-panel with" id="panel-with">
         <div class="rt-label"><span class="dot"></span> With spai</div>
         <div class="rt-step done" data-step="0"><span class="dim">$</span> spai blast execute_plan</div>
+        <div class="rt-thinking" id="think-with">thinking &mdash; OK, 12 callers, 3 tests, high risk. Here's the plan...</div>
         <div class="rt-counter"><span class="count" id="count-with">1</span>round-trip</div>
+        <div class="rt-context">
+          <div class="rt-context-label">
+            <span>context window</span>
+            <span id="ctx-with-pct">0%</span>
+          </div>
+          <div class="rt-context-bar">
+            <div class="rt-context-fill" id="ctx-with-fill"></div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -857,8 +1058,67 @@
   </section>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- Section 4: Memory (teaser)                  -->
+  <!-- Section 4: Self-Awareness Loop              -->
   <!-- ═══════════════════════════════════════════ -->
+
+  <section class="loop">
+    <div class="section-head">
+      <h2>The system <span>watches itself.</span></h2>
+      <p>Deming's PDCA cycle, applied to tooling. Toyota's line workers pull the andon cord <a href="https://blog.gembaacademy.com/2008/04/08/how_many_times_do_you_pull_the_andon_cord_each_day/" style="color:var(--accent);text-decoration:underline;text-underline-offset:2px;">5,000 times a day</a>. The hooks are the cord. The cost per pull is 5ms.</p>
+    </div>
+
+    <div class="loop-flow">
+      <div class="loop-ring">
+        <div class="loop-stage" id="ls-0">
+          <span class="stage-label">do</span>
+          <span class="stage-name">hooks</span>
+          <span class="stage-desc">PreToolUse hooks log every tool call &mdash; Read, Edit, Grep, Bash &mdash; as structured data. No interference, pure observation.</span>
+        </div>
+        <div class="loop-stage" id="ls-1">
+          <span class="stage-label">check</span>
+          <span class="stage-name">reflect</span>
+          <span class="stage-desc">Merges spai and tool call logs. Detects repeated chains across sessions. Groups by real session IDs, not guesswork.</span>
+        </div>
+        <div class="loop-stage" id="ls-2">
+          <span class="stage-label">act</span>
+          <span class="stage-name">patterns</span>
+          <span class="stage-desc">Read &rarr; Read &rarr; Grep &rarr; blast &rarr; Edit. The same chain 12 times? That's a plugin waiting to be born.</span>
+        </div>
+        <div class="loop-stage" id="ls-3">
+          <span class="stage-label">plan</span>
+          <span class="stage-name">plugins</span>
+          <span class="stage-desc"><code>spai new-plugin</code> scaffolds it. The next session uses the plugin. One call instead of five. The loop restarts.</span>
+        </div>
+
+        <div class="loop-arrows">
+          <div class="loop-arrow" id="la-0">&rarr;</div>
+          <div class="loop-arrow" id="la-1">&darr;</div>
+          <div class="loop-arrow" id="la-2">&larr;</div>
+          <div class="loop-arrow" id="la-3">&uarr;</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;">
+        <button class="btn play" onclick="playLoop()">play</button>
+      </div>
+
+      <div class="loop-example" id="loop-ex">
+        <span class="cm">;; What the hook logs (JSONL, one line per tool call)</span><br>
+        <span class="str">{"tool":"Read","key":"plan.rs","sid":"a8f3..."}</span><br>
+        <span class="str">{"tool":"Grep","key":"fn compile","sid":"a8f3..."}</span><br>
+        <span class="str">{"tool":"Read","key":"compile.rs","sid":"a8f3..."}</span><br>
+        <br>
+        <span class="cm">;; What reflect surfaces</span><br>
+        <span class="kw">:repeated-sequences</span><br>
+        [{<span class="kw">:sequence</span> [<span class="str">"Read plan.rs"</span> <span class="str">"Grep fn-pattern"</span> <span class="str">"Read compile.rs"</span>]<br>
+        &nbsp;&nbsp;<span class="kw">:count</span> <span class="sym">12</span> <span class="kw">:sessions</span> <span class="sym">4</span>}]<br>
+        <br>
+        <span class="cm">;; This chain becomes: spai new-plugin explore-compile</span>
+      </div>
+
+      <p class="loop-insight">The worker, the inspector, and the process are the same system. No committee gates the experiment. <span>spai new-plugin</span> is pulling the cord.</p>
+    </div>
+  </section>
 
   <!-- ═══════════════════════════════════════════ -->
   <!-- Section 5: The Design Insight               -->
@@ -883,7 +1143,7 @@
       <div class="insight-card">
         <span class="num">&#8734;</span>
         <h3>Memory across sessions</h3>
-        <p>Agents forget everything when the context window closes. What if they didn't? Persistent, searchable, linked memory &mdash; agents teaching agents. Coming soon.</p>
+        <p>Agents forget everything when the context window closes. spai gives them a persistent knowledge graph &mdash; searchable, linked, accumulating. Session 47 reads what session 3 learned. Agents teaching agents.</p>
       </div>
     </div>
   </section>
@@ -902,6 +1162,11 @@
     <div class="faq-item" onclick="toggleFaq(this)">
       <div class="faq-q">Can I add my own tools?</div>
       <div class="faq-a">Yes. spai discovers plugins automatically at three levels: bundled in the install directory, project-local in <code>.spai/plugins/</code>, and user-level on your PATH. Any executable named <code>spai-*</code> becomes a command. Run <code>spai new-plugin my-tool</code> to scaffold one. Your project's plugins travel with the repo. Your personal plugins stay on your machine. Both show up in <code>spai help</code>.</div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">How do hooks and prompts work together?</div>
+      <div class="faq-a">Prompts teach the agent what each tool does &mdash; the MCP tool descriptions are the interface contract. Hooks observe how the agent actually uses them &mdash; PreToolUse hooks log every call without interfering. Prompts say "use <code>spai blast</code> instead of five greps." Hooks measure whether it does. The gap between instruction and behavior is where the next improvement lives.</div>
     </div>
 
     <div class="faq-item" onclick="toggleFaq(this)">
@@ -938,7 +1203,16 @@
   let rtAnimating = false;
 
   function hideAllThinking() {
-    document.querySelectorAll('.rt-thinking').forEach(t => t.classList.remove('visible'));
+    document.querySelectorAll('.rt-thinking').forEach(t => {
+      t.classList.remove('visible', 'settled');
+    });
+  }
+
+  function setContext(panel, pct) {
+    const fill = document.getElementById('ctx-' + panel + '-fill');
+    const label = document.getElementById('ctx-' + panel + '-pct');
+    fill.style.width = pct + '%';
+    label.textContent = pct + '%';
   }
 
   async function playRoundtrip() {
@@ -956,37 +1230,96 @@
     hideAllThinking();
     document.getElementById('count-without').textContent = '0';
     document.getElementById('count-with').textContent = '0';
+    document.getElementById('pass-label').classList.remove('visible');
+    setContext('without', 0);
+    setContext('with', 0);
 
     const withoutSteps = document.querySelectorAll('#panel-without .rt-step');
     const withStep = document.querySelector('#panel-with .rt-step');
 
+    // Pass 1: Full speed with thinking pauses.
+    // Each pass eats ~18% context — it's the repetition that kills you.
+    const pass1Context = [4, 7, 11, 15, 18];
+    const thinkDuration = [1800, 2000, 2400, 2200, 3000];
+
     await sleep(400);
 
-    // Animate "without" steps with thinking between each
+    // --- Pass 1: full detail ---
     for (let i = 0; i < withoutSteps.length; i++) {
       if (i > 0) withoutSteps[i - 1].classList.remove('active');
       if (i > 0) withoutSteps[i - 1].classList.add('done');
       withoutSteps[i].classList.add('active');
       document.getElementById('count-without').textContent = (i + 1).toString();
-      await sleep(500);
+      setContext('without', pass1Context[i]);
+      await sleep(600);
 
-      // Show thinking after each step (except the last)
       const think = document.getElementById('think-' + i);
       if (think) {
         think.classList.add('visible');
-        await sleep(900);
+        await sleep(thinkDuration[i]);
         think.classList.remove('visible');
-        await sleep(150);
+        await sleep(250);
       }
     }
+    withoutSteps[withoutSteps.length - 1].classList.remove('active');
+    withoutSteps[withoutSteps.length - 1].classList.add('done');
 
-    await sleep(200);
+    // --- Pass 2: compressed replay (different part of the task) ---
+    document.getElementById('pass-label').classList.add('visible');
+    await sleep(600);
 
-    // Now the "with" side — instant
+    let runningCtx = 18;
+    const pass2Bump = [3, 4, 4, 4, 3]; // ~18% more
+
+    for (let i = 0; i < withoutSteps.length; i++) {
+      withoutSteps.forEach(s => s.classList.remove('active', 'done'));
+      withoutSteps[i].classList.add('active');
+      for (let j = 0; j < i; j++) withoutSteps[j].classList.add('done');
+      runningCtx += pass2Bump[i];
+      document.getElementById('count-without').textContent = (5 + i + 1).toString();
+      setContext('without', runningCtx);
+      await sleep(350);
+    }
+    withoutSteps[withoutSteps.length - 1].classList.remove('active');
+    withoutSteps[withoutSteps.length - 1].classList.add('done');
+
+    // --- Pass 3: even faster (agent is circling) ---
+    await sleep(400);
+    const pass3Bump = [3, 4, 4, 4, 3];
+    for (let i = 0; i < withoutSteps.length; i++) {
+      withoutSteps.forEach(s => s.classList.remove('active', 'done'));
+      withoutSteps[i].classList.add('active');
+      for (let j = 0; j < i; j++) withoutSteps[j].classList.add('done');
+      runningCtx += pass3Bump[i];
+      document.getElementById('count-without').textContent = (10 + i + 1).toString();
+      setContext('without', runningCtx);
+      await sleep(250);
+    }
+
+    // Final thinking — stays visible, stops pulsing
+    const think4 = document.getElementById('think-4');
+    if (think4) {
+      think4.classList.add('visible');
+      await sleep(3000);
+      think4.classList.add('settled');
+    }
+    setContext('without', runningCtx + 5); // ~59%
+    document.getElementById('count-without').textContent = '15';
+    await sleep(800);
+
+    // --- "With" side — one call, done ---
     withStep.classList.add('active');
     document.getElementById('count-with').textContent = '1';
+    setContext('with', 8);
+    await sleep(500);
 
-    await sleep(1000);
+    // Final thinking — stays visible, stops pulsing
+    const thinkWith = document.getElementById('think-with');
+    thinkWith.classList.add('visible');
+    await sleep(3000);
+    thinkWith.classList.add('settled');
+
+    await sleep(500);
 
     // Final state
     withoutSteps[withoutSteps.length - 1].classList.remove('active');
@@ -1065,6 +1398,61 @@
     await sleep(1200);
 
     pipeAnimating = false;
+  }
+
+  /* ═══════════════════════════════════════════ */
+  /* Self-awareness loop animation               */
+  /* ═══════════════════════════════════════════ */
+
+  let loopAnimating = false;
+
+  async function playLoop() {
+    if (loopAnimating) return;
+    loopAnimating = true;
+
+    // Reset
+    for (let i = 0; i < 4; i++) {
+      document.getElementById('ls-' + i).classList.remove('active', 'done');
+      document.getElementById('la-' + i).classList.remove('active');
+    }
+    document.getElementById('loop-ex').classList.remove('visible');
+
+    await sleep(500);
+
+    // Animate through each stage — let each one breathe
+    for (let i = 0; i < 4; i++) {
+      document.getElementById('ls-' + i).classList.add('active');
+      if (i > 0) document.getElementById('la-' + (i - 1)).classList.add('active');
+
+      // Show example data after the "reflect" stage
+      if (i === 1) {
+        await sleep(1000);
+        document.getElementById('loop-ex').classList.add('visible');
+      }
+
+      await sleep(2000);
+
+      if (i < 3) {
+        document.getElementById('ls-' + i).classList.remove('active');
+        document.getElementById('ls-' + i).classList.add('done');
+      }
+    }
+
+    // Final: loop arrow lights up — the return path
+    document.getElementById('la-3').classList.add('active');
+    await sleep(1500);
+
+    // Return to start — the loop closes
+    document.getElementById('ls-3').classList.remove('active');
+    document.getElementById('ls-3').classList.add('done');
+    document.getElementById('ls-0').classList.remove('done');
+    document.getElementById('ls-0').classList.add('active');
+    await sleep(2000);
+
+    document.getElementById('ls-0').classList.remove('active');
+    document.getElementById('ls-0').classList.add('done');
+
+    loopAnimating = false;
   }
 
   /* ═══════════════════════════════════════════ */
