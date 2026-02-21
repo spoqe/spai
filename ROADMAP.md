@@ -57,6 +57,47 @@ With SPOQE: persistent KG memory for agents across sessions.
 - [ ] Event-sourcing: suppress instead of delete, mutation ledger via SPOQE
 - [ ] Agent provenance: session IDs, context metadata on insights
 
+## Next: Composable Pipelines (spai | spai)
+
+spai output is structured EDN. spai input should accept structured EDN.
+The moment tools compose — output of one is input to the next — it's not
+a toolkit anymore. It's a query engine over code.
+
+### The Principle
+Every spai command already returns EDN. Make every command *accept* EDN.
+The same homoiconicity that makes SPOQE work (queries are data, plans are
+data, results are data) applied to code exploration tooling.
+
+### Examples
+```bash
+# Blast radius for every error in the build
+spai errors-rust | spai blast
+
+# Who uses every function in a module, and how
+spai shape src/edna/ | spai context
+
+# Reverse deps of every file that co-changes with plan.rs
+spai related plan.rs | spai who
+
+# Build understanding, remember it persistently
+spai shape src/edna/ | spai context | spai remember +spoqe/edna
+```
+
+### What This Enables
+- **Agent-driven exploration chains** — the agent decides what to pipe where
+- **Scriptable code analysis** — `spai errors-rust | spai blast | jq '.high_risk'`
+- **Composable situational awareness** — build up a picture iteratively,
+  each tool enriching the previous output
+- **Code as data, tools as queries** — the false distinction between
+  "querying data" and "exploring code" dissolves
+
+### Implementation
+- [ ] Stdin detection: when piped, read EDN from stdin
+- [ ] Each command defines what input shapes it accepts (symbols, files, maps)
+- [ ] Output shapes documented per command (already EDN, just needs schema)
+- [ ] `spai pipe` meta-command for explicit multi-step chains
+- [ ] Streaming for large outputs (shape of a big module → blast each symbol)
+
 ## Later: Federation
 
 ### SPOQE-to-SPOQE Memory Federation

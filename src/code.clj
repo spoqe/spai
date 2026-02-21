@@ -5,7 +5,7 @@
   "Gather all definitions. Returns flat lists with full detail."
   [path]
   (let [lang (detect-lang path)
-        pats (get lang-patterns lang)]
+        pats (get @lang-patterns lang)]
     (when pats
       (let [find-matches (fn [pat-key]
                            (when-let [pat (get pats pat-key)]
@@ -116,7 +116,8 @@
    :clojure    #"\((defn?-?|defrecord|deftype|defprotocol|defmulti|defmethod|def)\s+"
    :python     #"^\s*(async\s+)?(def|class)\s+"
    :go         #"^(func|type|var|const)\s+"
-   :php        #"^\s*(public|protected|private)?\s*(static\s+)?(function|class|interface|trait|enum|abstract\s+class|final\s+class)\s+"})
+   :php        #"^\s*(public|protected|private)?\s*(static\s+)?(function|class|interface|trait|enum|abstract\s+class|final\s+class)\s+"
+   :java       #"^\s*(public|protected|private)?\s*(static\s+)?(abstract\s+)?(class|interface|enum|record|@interface|void|int|long|boolean|String|[A-Z]\w+)\s+"})
 
 (defn definition
   "Find where a symbol is defined. Filters usages to definition-site patterns."
@@ -161,7 +162,8 @@
    :python     {:pattern "^(import|from)\\s+" :extract #"(?:from|import)\s+(\S+)"}
    :go         {:pattern "^import\\s+" :extract #"\"([^\"]+)\""}
    :php        {:pattern "^\\s*(use|require|require_once|include|include_once)\\s+"
-                :extract #"(?:use|require|require_once|include|include_once)\s+(\S+)"}})
+                :extract #"(?:use|require|require_once|include|include_once)\s+(\S+)"}
+   :java       {:pattern "^import\\s+" :extract #"import\s+(?:static\s+)?([^;]+)"}})
 
 (defn who
   "Reverse file dependencies. Who imports/uses this file?
@@ -207,31 +209,22 @@
 
 ;; -------------------------------------------------------------------
 ;; deps — forward dependency graph
+;;
+;; Three multimethods dispatch on language:
+;;   extract-imports    — parse import statements from a source file
+;;   find-project-root  — locate project root for module resolution
+;;   resolve-module     — resolve a module reference to a file path
 ;; -------------------------------------------------------------------
 
-(defn- find-src-root
-  "Find the src/ root for resolving crate:: imports.
-   Walks up from path looking for Cargo.toml, returns its src/ subdir."
-  [start-path]
-  (loop [dir (let [f (io/file start-path)]
-               (if (.isFile f) (.getParentFile f) f))]
-    (when dir
-      (let [cargo (io/file dir "Cargo.toml")
-            src   (io/file dir "src")]
-        (if (and (.exists cargo) (.isDirectory src))
-          (.getCanonicalPath src)
-          (recur (.getParentFile dir)))))))
+(defmulti extract-imports
+  "Extract import declarations from a source file.
+   Returns seq of {:module :line :kind}."
+  (fn [lang _file-path] lang))
 
-(defn- extract-rust-imports
-  "Extract all use/mod declarations from a Rust file with module paths."
-  [file-path]
-  (let [;; use statements
-        use-hits  (or (grepf "^\\s*(pub\\s+)?use\\s+" file-path) [])
-        ;; mod declarations (these define submodules)
+(defmethod extract-imports :rust [_ file-path]
+  (let [use-hits  (or (grepf "^\\s*(pub\\s+)?use\\s+" file-path) [])
         mod-hits  (or (grepf "^\\s*(pub(\\(crate\\))?\\s+)?mod\\s+\\w+\\s*;" file-path) [])
         parse-use (fn [text]
-                    ;; Extract the full path from: use crate::foo::bar::{Baz, Qux};
-                    ;; We want "crate::foo::bar" (the module, not the items)
                     (when-let [m (re-find #"use\s+(\S+?)(?:::\{|;)" text)]
                       (second m)))
         parse-mod (fn [text]
@@ -245,18 +238,14 @@
            (keep (fn [h] (when-let [m (parse-mod (:text h))]
                            {:module m :line (:line h) :kind :mod})))))))
 
-(defn- extract-ts-imports
-  "Extract import paths from a TypeScript file."
-  [file-path]
+(defmethod extract-imports :typescript [_ file-path]
   (let [hits (or (grepf "^import\\s+" file-path) [])]
     (->> hits
          (keep (fn [h]
                  (when-let [m (re-find #"from\s+['\"]([^'\"]+)['\"]" (:text h))]
                    {:module (second m) :line (:line h) :kind :import}))))))
 
-(defn- extract-python-imports
-  "Extract imports from a Python file with proper from/import handling."
-  [file-path]
+(defmethod extract-imports :python [_ file-path]
   (let [hits (or (grepf "^\\s*(import|from)\\s+" file-path) [])]
     (->> hits
          (keep (fn [h]
@@ -281,12 +270,9 @@
                      (re-find #"^import\s+" text)
                      (when-let [[_ mod-name] (re-find #"^import\s+(\S+)" text)]
                        {:module (str/replace mod-name #",$" "")
-                        :line (:line h) :kind :import})))))))) 
+                        :line (:line h) :kind :import}))))))))
 
- (defn- extract-php-imports
-  "Extract use/require/include statements from a PHP file.
-   Handles: use Namespace\\Class, require/include with file paths."
-  [file-path]
+(defmethod extract-imports :php [_ file-path]
   (let [hits (or (grepf "^\\s*(use|require|require_once|include|include_once)\\s+" file-path) [])]
     (->> hits
          (keep (fn [h]
@@ -307,97 +293,16 @@
                         :line   (:line h)
                         :kind   :require}))))))))
 
-(defn- find-python-root
-  "Find the Python project root. Walks up looking for pyproject.toml, setup.py, etc."
-  [start-path]
-  (loop [dir (let [f (io/file start-path)]
-               (if (.isFile f) (.getParentFile f) f))]
-    (when dir
-      (if (or (.exists (io/file dir "pyproject.toml"))
-              (.exists (io/file dir "setup.py"))
-              (.exists (io/file dir "setup.cfg")))
-        (.getCanonicalPath dir)
-        (recur (.getParentFile dir)))))) 
+(defmethod extract-imports :java [_ file-path]
+  (let [hits (or (grepf "^import\\s+" file-path) [])]
+    (->> hits
+         (keep (fn [h]
+                 (when-let [[_ path] (re-find #"import\s+(?:static\s+)?([^;]+)" (:text h))]
+                   {:module (str/trim path)
+                    :line   (:line h)
+                    :kind   (if (re-find #"^import\s+static\s+" (:text h)) :static-import :import)}))))))
 
- (defn- find-php-root
-  "Find the PHP project root. Walks up looking for composer.json."
-  [start-path]
-  (loop [dir (let [f (io/file start-path)]
-               (if (.isFile f) (.getParentFile f) f))]
-    (when dir
-      (if (.exists (io/file dir "composer.json"))
-        (.getCanonicalPath dir)
-        (recur (.getParentFile dir))))))
-
-(defn- resolve-python-module
-  "Try to resolve a Python module to a project file.
-   Handles both absolute (foo.bar) and relative (.foo) imports."
-  [mod-str current-file project-root]
-  (let [cur-dir  (.getParent (io/file current-file))
-        try-file (fn [base as-path]
-                   (when base
-                     (or (let [f (io/file (str base "/" as-path ".py"))]
-                           (when (.exists f) (.getCanonicalPath f)))
-                         (let [f (io/file (str base "/" as-path "/__init__.py"))]
-                           (when (.exists f) (.getCanonicalPath f))))))]
-    (cond
-      ;; Relative: .foo → current dir, ..foo → parent, etc.
-      (str/starts-with? mod-str ".")
-      (let [dots   (count (re-find #"^\.+" mod-str))
-            rest   (subs mod-str dots)
-            ;; Walk up one less than dot count (. = current, .. = parent)
-            base   (loop [d (io/file cur-dir) n (dec dots)]
-                     (if (or (<= n 0) (nil? d)) d
-                       (recur (.getParentFile d) (dec n))))
-            as-path (str/replace rest "." "/")]
-        (when base
-          (if (seq as-path)
-            (try-file (.getPath base) as-path)
-            ;; from . import foo → look for __init__.py in current package
-            (let [f (io/file (.getPath base) "__init__.py")]
-              (when (.exists f) (.getCanonicalPath f))))))
-
-      ;; Absolute: try from project root, then common src/ layouts
-      :else
-      (let [as-path (str/replace mod-str "." "/")
-            roots   (if project-root
-                      [project-root
-                       (str project-root "/src")
-                       (str project-root "/lib")]
-                      [cur-dir])]
-        (some #(try-file % as-path) roots))))) 
-
- (defn- resolve-php-module
-  "Try to resolve a PHP namespace to a project file via PSR-4 convention.
-   Namespace\\Class maps to Namespace/Class.php relative to project root."
-  [mod-str current-file project-root]
-  (let [cur-dir  (.getParent (io/file current-file))
-        ;; Convert namespace separators to path: App\\Models\\User -> App/Models/User
-        as-path  (str/replace mod-str "\\" "/")
-        try-file (fn [base path]
-                   (when base
-                     (let [f (io/file (str base "/" path ".php"))]
-                       (when (.exists f) (.getCanonicalPath f)))))]
-    (cond
-      ;; Relative path (require/include): try from current dir
-      (or (str/starts-with? mod-str "./")
-          (str/starts-with? mod-str "../")
-          (str/ends-with? mod-str ".php"))
-      (let [f (io/file cur-dir mod-str)]
-        (when (.exists f) (.getCanonicalPath f)))
-
-      ;; Namespace (use statement): try PSR-4 resolution from project root
-      :else
-      (when project-root
-        (or (try-file project-root as-path)
-            ;; Common PSR-4 prefixes: src/, lib/, app/
-            (try-file (str project-root "/src") as-path)
-            (try-file (str project-root "/lib") as-path)
-            (try-file (str project-root "/app") as-path))))))
-
-(defn- extract-generic-imports
-  "Extract imports using the generic import-patterns config."
-  [file-path lang]
+(defmethod extract-imports :default [lang file-path]
   (when-let [ip (get import-patterns lang)]
     (let [hits (or (grepf (:pattern ip) file-path) [])]
       (->> hits
@@ -408,10 +313,66 @@
                         :line (:line h)
                         :kind :import}))))))))
 
-(defn- resolve-rust-module
-  "Try to resolve a Rust module path to a project file."
-  [mod-str src-root current-file]
-  (let [clean   (-> mod-str
+;; ---
+
+(defmulti find-project-root
+  "Find the project root directory for resolving imports."
+  (fn [lang _start-path] lang))
+
+(defmethod find-project-root :rust [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (let [cargo (io/file dir "Cargo.toml")
+            src   (io/file dir "src")]
+        (if (and (.exists cargo) (.isDirectory src))
+          (.getCanonicalPath src)
+          (recur (.getParentFile dir)))))))
+
+(defmethod find-project-root :python [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (or (.exists (io/file dir "pyproject.toml"))
+              (.exists (io/file dir "setup.py"))
+              (.exists (io/file dir "setup.cfg")))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defmethod find-project-root :php [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (.exists (io/file dir "composer.json"))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defmethod find-project-root :java [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (or (.exists (io/file dir "pom.xml"))
+              (.exists (io/file dir "build.gradle"))
+              (.exists (io/file dir "build.gradle.kts")))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defmethod find-project-root :default [_ _] nil)
+
+;; ---
+
+(defmulti resolve-module
+  "Try to resolve a module reference to a project file path.
+   Returns canonical path string or nil."
+  (fn [lang _mod-str _current-file _project-root] lang))
+
+(defmethod resolve-module :rust [_ mod-str current-file src-root]
+  (let [;; Normalize bare names: foo → self::foo, super alone → super::mod
+        mod-str (cond
+                  (= mod-str "super")            "super::mod"
+                  (not (re-find #"::" mod-str))   (str "self::" mod-str)
+                  :else                            mod-str)
+        clean   (-> mod-str
                     (str/replace #"::\{.*$" "")
                     (str/replace #"::\*$" "")
                     str/trim)
@@ -435,9 +396,7 @@
 
       :else nil)))
 
-(defn- resolve-ts-module
-  "Try to resolve a TypeScript relative import to a project file."
-  [mod-str current-file]
+(defmethod resolve-module :typescript [_ mod-str current-file _]
   (when (str/starts-with? mod-str ".")
     (let [cur-dir (.getParent (io/file current-file))
           base    (str cur-dir "/" mod-str)]
@@ -446,8 +405,82 @@
           (let [f (io/file (str base "/index.ts"))]  (when (.exists f) (.getCanonicalPath f)))
           (let [f (io/file (str base "/index.tsx"))] (when (.exists f) (.getCanonicalPath f)))))))
 
+(defmethod resolve-module :python [_ mod-str current-file project-root]
+  (let [cur-dir  (.getParent (io/file current-file))
+        try-file (fn [base as-path]
+                   (when base
+                     (or (let [f (io/file (str base "/" as-path ".py"))]
+                           (when (.exists f) (.getCanonicalPath f)))
+                         (let [f (io/file (str base "/" as-path "/__init__.py"))]
+                           (when (.exists f) (.getCanonicalPath f))))))]
+    (cond
+      ;; Relative: .foo → current dir, ..foo → parent, etc.
+      (str/starts-with? mod-str ".")
+      (let [dots   (count (re-find #"^\.+" mod-str))
+            rest   (subs mod-str dots)
+            base   (loop [d (io/file cur-dir) n (dec dots)]
+                     (if (or (<= n 0) (nil? d)) d
+                       (recur (.getParentFile d) (dec n))))
+            as-path (str/replace rest "." "/")]
+        (when base
+          (if (seq as-path)
+            (try-file (.getPath base) as-path)
+            (let [f (io/file (.getPath base) "__init__.py")]
+              (when (.exists f) (.getCanonicalPath f))))))
+
+      ;; Absolute: try from project root, then common src/ layouts
+      :else
+      (let [as-path (str/replace mod-str "." "/")
+            roots   (if project-root
+                      [project-root
+                       (str project-root "/src")
+                       (str project-root "/lib")]
+                      [cur-dir])]
+        (some #(try-file % as-path) roots)))))
+
+(defmethod resolve-module :php [_ mod-str current-file project-root]
+  (let [cur-dir  (.getParent (io/file current-file))
+        as-path  (str/replace mod-str "\\" "/")
+        try-file (fn [base path]
+                   (when base
+                     (let [f (io/file (str base "/" path ".php"))]
+                       (when (.exists f) (.getCanonicalPath f)))))]
+    (cond
+      ;; Relative path (require/include): try from current dir
+      (or (str/starts-with? mod-str "./")
+          (str/starts-with? mod-str "../")
+          (str/ends-with? mod-str ".php"))
+      (let [f (io/file cur-dir mod-str)]
+        (when (.exists f) (.getCanonicalPath f)))
+
+      ;; Namespace (use statement): try PSR-4 resolution from project root
+      :else
+      (when project-root
+        (or (try-file project-root as-path)
+            (try-file (str project-root "/src") as-path)
+            (try-file (str project-root "/lib") as-path)
+            (try-file (str project-root "/app") as-path))))))
+
+(defmethod resolve-module :java [_ mod-str _current-file project-root]
+  (let [;; com.foo.bar.Baz → com/foo/bar/Baz.java
+        as-path (str (str/replace mod-str "." "/") ".java")
+        try-file (fn [base]
+                   (when base
+                     (let [f (io/file (str base "/" as-path))]
+                       (when (.exists f) (.getCanonicalPath f)))))]
+    (when project-root
+      (or (try-file (str project-root "/src/main/java"))
+          (try-file (str project-root "/src"))
+          (try-file project-root)
+          ;; Android layout
+          (try-file (str project-root "/app/src/main/java"))))))
+
+(defmethod resolve-module :default [_ _ _ _] nil)
+
+;; ---
+
 (defn- classify-import
-  "Classify an import as :local or :external."
+  "Classify an import as :local, :external, or :probe."
   [mod-str lang]
   (case lang
     :rust       (if (or (str/starts-with? mod-str "crate::")
@@ -460,6 +493,13 @@
     :typescript (if (str/starts-with? mod-str ".") :local :external)
     :python     (if (str/starts-with? mod-str ".") :local :probe)
     :php        :probe
+    :java       (if (or (str/starts-with? mod-str "java.")
+                        (str/starts-with? mod-str "javax.")
+                        (str/starts-with? mod-str "jakarta.")
+                        (str/starts-with? mod-str "org.w3c.")
+                        (str/starts-with? mod-str "org.xml.")
+                        (str/starts-with? mod-str "org.ietf."))
+                  :external :probe)
     :clojure    :unknown
     :go         :unknown
     :unknown))
@@ -482,16 +522,7 @@
                          (filter #(re-find source-exts (.getName %)))
                          (map #(.getCanonicalPath %))
                          sort))
-            ;; For Rust: find crate root for resolving crate:: paths
-            src-root (when (= lang :rust)
-                       (find-src-root (or (first files) path)))
-            ;; For Python: find project root for resolving absolute imports
-            py-root  (when (= lang :python)
-                       (find-python-root (or (first files) path)))
-            ;; For PHP: find project root for PSR-4 resolution
-            php-root (when (= lang :php)
-                       (find-php-root (or (first files) path)))
-            ;; Use git root or crate root for relativizing paths
+            project-root (find-project-root lang (or (first files) path))
             target-dir (if (.isFile f) (.getParent f) (.getCanonicalPath f))
             git-root (try (str/trim (:out @(p/process ["git" "rev-parse" "--show-toplevel"]
                                                        {:out :string :err :string
@@ -504,50 +535,23 @@
                              (let [r (subs p (count base))]
                                (if (str/starts-with? r "/") (subs r 1) r))
                              p))))
-            ;; Extract + resolve imports for each file
             entries  (mapv
                        (fn [file-path]
-                         (let [raw-imports (case lang
-                                            :rust       (extract-rust-imports file-path)
-                                            :typescript (extract-ts-imports file-path)
-                                            :python     (extract-python-imports file-path)
-                                            :php        (extract-php-imports file-path)
-                                            (extract-generic-imports file-path lang))
-                               ;; Collect mod names so bare imports can match them
+                         (let [raw-imports (extract-imports lang file-path)
+                               ;; Rust: bare names matching a mod decl are local
                                mod-names  (when (= lang :rust)
                                             (set (keep (fn [{:keys [kind module]}]
                                                          (when (= kind :mod)
                                                            (str/replace module "self::" "")))
                                                        raw-imports)))
                                imports (mapv (fn [{:keys [module] :as imp}]
-                                               (let [;; Bare names matching a mod decl are local
-                                                     cls (if (and (= lang :rust)
+                                               (let [cls (if (and (= lang :rust)
                                                                   mod-names
                                                                   (contains? mod-names module)
                                                                   (not= :mod (:kind imp)))
                                                            :local
                                                            (classify-import module lang))
-                                                     ;; For bare local names, resolve via self::
-                                                     ;; For "super" alone, resolve parent mod
-                                                     resolve-mod (cond
-                                                                   (and (= cls :local) (= lang :rust)
-                                                                        (not (re-find #"::" module)))
-                                                                   (str "self::" module)
-
-                                                                   (and (= cls :local) (= lang :rust)
-                                                                        (= module "super"))
-                                                                   "super::mod"
-
-                                                                   :else module)
-                                                     resolved (case lang
-                                                                :rust (when (= cls :local)
-                                                                        (resolve-rust-module resolve-mod src-root file-path))
-                                                                :typescript (when (= cls :local)
-                                                                              (resolve-ts-module module file-path))
-                                                                :python (resolve-python-module module file-path py-root)
-                                                                :php    (resolve-php-module module file-path php-root)
-                                                                nil)
-                                                     ;; For Python/PHP :probe — resolution determines local vs external
+                                                     resolved (resolve-module lang module file-path project-root)
                                                      final-cls (if (= cls :probe)
                                                                  (if resolved :local :external)
                                                                  cls)]
@@ -560,11 +564,8 @@
                             :external (vec (distinct (map :module (filter #(#{:external :unknown} (:scope %)) imports))))}))
                        files)]
         (if (.isFile f)
-          ;; Single file view
           (first entries)
-          ;; Directory view: graph + analysis
-          (let [;; Build reverse dependency map from resolved paths
-                rev-deps (reduce
+          (let [rev-deps (reduce
                            (fn [acc entry]
                              (reduce (fn [a imp]
                                        (if-let [r (:resolved imp)]
@@ -572,21 +573,18 @@
                                          a))
                                      acc (:imports entry)))
                            {} entries)
-                ;; Hub files: most imports
                 hubs (->> entries
                           (sort-by :local >)
                           (take 10)
                           (mapv #(hash-map :file (:file %)
                                           :local-imports (:local %)
                                           :total-imports (count (:imports %)))))
-                ;; Load-bearing files: most depended on
                 load-bearing (->> rev-deps
                                   (sort-by #(count (val %)) >)
                                   (take 10)
                                   (mapv (fn [[f deps]]
                                           {:file f :depended-on-by (count deps)
                                            :dependents (vec (sort deps))})))
-                ;; External dep frequency
                 ext-freq (->> entries
                               (mapcat :external)
                               frequencies
@@ -611,7 +609,7 @@
   [symbol path]
   (let [path    (or path ".")
         lang    (detect-lang path)
-        fn-pat  (get-in lang-patterns [lang :functions])
+        fn-pat  (get-in @lang-patterns [lang :functions])
         matches (:matches (usages symbol path))]
     (if-not fn-pat
       {:symbol symbol :path path :matches matches}

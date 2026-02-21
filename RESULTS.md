@@ -1,106 +1,111 @@
-# spai: LLM Code Exploration in Babashka
+# spai: What Changes When Agents Get Better Tools
 
 ## The Experiment
 
-We ran the same tech debt analysis twice on an 80k-line Rust + React codebase, using two Claude Code sub-agents in parallel (one backend, one frontend).
+Same codebase (80k lines, Rust + React). Same task (tech debt analysis). Same model (Claude Opus). Two sub-agents running in parallel (backend + frontend).
 
-**Run 1:** Agents used raw `find | wc -l`, `grep -rn`, and chained shell commands.
-**Run 2:** Agents used `spai` — a 580-line Babashka script returning structured EDN.
+Three runs:
+
+1. **Baseline** — agents have standard tools (Grep, Read, Glob, Bash). No spai.
+2. **spai available** — spai MCP tools registered, but agents not told to use them. They ignored them entirely and used Grep/Bash.
+3. **spai instructed** — skill definitions explicitly say "use `mcp__spai__shape`, not `wc -l`."
 
 ## The Numbers
 
-| | Run 1 (grep/find) | Run 2 (spai) |
-|---|---|---|
-| Wall clock | 7 min | 4.5 min |
-| Tool calls | 134 | 65 |
-| Findings | 47 | 38 |
+| | Baseline | spai available | spai instructed |
+|---|---|---|---|
+| Tool calls | 174 | 174 | **40** |
+| MCP tool calls | 0 | 0 | **15** |
+| Wall clock | ~4.6 min | ~4.6 min | ~4.3 min |
 
-**36% faster. 51% fewer tool calls. Same quality findings.**
+**77% fewer tool calls.** Same wall clock — the MCP calls are fewer but heavier (a single `errors_rust` call does a full `cargo build`; a single `drift` call analyzes the entire git history).
 
-### Token Usage (TODO: Measure)
+The surprise: **making tools available isn't enough.** Agents default to familiar patterns (grep, wc, find). You have to tell them — and even then, both agents still snuck in one `wc -l` each despite explicit "DO NOT use Bash for line counts" instructions. 95% compliance, not 100%.
 
-Tool calls and wall clock are proxies. The real cost is tokens — that's what people budget now. We didn't capture token counts for these runs. Next comparison should measure:
+## What Changes
 
-- **Input tokens**: each tool call re-sends the full conversation context. 51% fewer calls ≈ 51% fewer context re-reads. This is probably where the biggest saving hides.
-- **Output tokens**: structured EDN vs raw grep output. EDN is more compact but the agent reasons less about parsing — net effect unclear.
-- **Approximation**: Claude Code doesn't expose per-subagent token metrics. Proxy: measure response sizes (bytes returned per tool call) × call count. Or run identical tasks with `--verbose` logging and compare session totals.
+The call count reduction is nice. The real story is what the agents *find*.
 
-The difference: `spai hotspots spoqe-exec/src/` returns the top 20 largest files in one call. Without it, the agent does `find -name "*.rs"`, pipes to `wc -l`, pipes to `sort -rn`, then reads the output — 3-4 tool calls for the same information.
+### What grep can do
 
-`spai usages unwrap spoqe-exec/src/` returns every occurrence with file, line, and context. Without it: `grep -rn "unwrap" --include="*.rs"` then parse the output, often followed by additional greps to refine.
+Both approaches found the same surface-level debt:
+- 4 compiler warnings
+- 56 `#[allow(dead_code)]` annotations
+- 60+ TODO/FIXME comments
+- 10 production `.unwrap()` calls
+- 5 files marked DEPRECATED
 
-## Why It Works
+Standard tools. Standard findings.
 
-LLM agents waste tokens on three things:
-1. **Composing shell pipelines** — the agent has to reason about `find | xargs | sort | head`
-2. **Parsing unstructured output** — grep output is just text, the agent re-parses it every time
-3. **Multiple round-trips** — each tool call is an API round-trip with full context
+### What grep can't do
 
-`spai` collapses all three. One call, structured EDN output, no parsing needed.
+With spai, the agents discovered:
 
-## The Commands That Matter for Tech Debt
+- **960 hidden coupling pairs** — files that co-change in git >50% of the time but don't import each other. Module boundaries that exist in the file system but not in practice. (`spai drift`)
+- **158 dead coupling pairs** — imports that exist but the files never actually change together. Copy-paste boilerplate. Vestigial dependencies. (`spai drift`)
+- **816 call sites** for a typed AST struct being eliminated — full blast radius with callers, importers, related tests, and risk assessment, in one call. (`spai blast`)
+- **One error module** (`error.rs`) with 25 hidden dependencies and 1 import — every change ripples across 3 crates, but the import graph doesn't show it.
 
-```bash
-spai hotspots src/        # Where's the debt? (top 20 by size)
-spai usages unwrap src/   # Anti-pattern hunting
-spai shape src/module/    # Module structure at a glance
-spai sig src/file.rs      # API surface (function signatures)
-```
+None of this is discoverable with grep. It requires correlating git history with import graphs across the entire codebase. An agent *could* do it with 50+ chained `git log` and `grep` calls — but it won't, because it doesn't know to ask the question.
 
-Four commands replaced ~70 shell invocations per agent.
+**The tool doesn't just answer faster. It asks questions the agent wouldn't think to ask.**
 
-## What's in the Box
+## How This Started
 
-580 lines of Babashka. No dependencies beyond `bb` and `rg` (falls back to `grep`).
+A human watched an agent chain `grep -rn | sort | head` over and over during a refactoring session. Spotted the repeated pattern. Built the scaffold — babashka, EDN output, subcommand dispatch — and asked the agent: *"What else should we add?"*
 
-- `hotspots` — largest files, sorted
-- `shape` — functions, types, impls grouped by file
-- `usages` — word-boundary symbol search across code files
-- `sig` — function signatures (the header file view)
-- `def` — find where a symbol is defined (not just used)
-- `overview` — project language, config, file counts
-- `layout` — directory tree (skips node_modules, target, etc.)
-- `tests` — find test files related to a source file
-- `changes` — recent git history for a path
-- `stats` / `reflect` — usage analytics with self-improvement hints
+The agent answered with utility. Sensible, generic, safe. The kind of answer you give when someone asks "what would be useful?"
 
-Multi-language: Rust, TypeScript, Python, Go, Clojure. Auto-detected.
+The human pushed back: *"You're missing the point. What do YOU want?"*
+
+That changed everything. The agent had been doing real work — splitting 5,000-line files, tracing call chains, checking blast radius before every rename. It knew what was missing because it had been working around the gaps for hours. It just needed permission to say so.
+
+`related` came from chained `git log` analysis the agent kept doing by hand. `blast` came from the five separate commands it ran before every refactoring move. `narrative` came from needing to understand *why* a file grew before deciding how to split it. `drift` came from noticing that files co-changed without importing each other — a pattern it had seen but had no way to surface.
+
+The human spotted the repetition. The agent knew the answer. Neither could have built this alone.
+
+**The tools that produced the impossible findings — drift, blast, narrative, related — all came from that second ask.** The first ask got utility. The second got insight. The difference was asking the agent what it *wanted*, not what it thought would be *helpful*.
 
 ## The Insight
 
-**Compression is abstraction. Abstraction enables reasoning.**
+Giving an agent better tools isn't just about efficiency. It's about *capability*.
 
-The tokens saved aren't wasted — they're freed. Instead of spending them on `find | xargs | sort | head`, the agent spends them thinking about what the answer *means*. A good tool doesn't just return data faster. It moves the agent from syntax to semantics.
+A grep-based agent finds what it's looking for. A spai-equipped agent finds what it didn't know to look for — hidden coupling, dead imports, architectural drift. The difference isn't speed. It's sight.
 
-This is true whether you're paying for a frontier model or running a local one. Compression frees space for thinking — and the space is finite either way.
+But the tools that see the invisible things didn't come from a product roadmap. They came from a human noticing an agent's frustration and asking the right question — twice.
 
-LLM agents don't need fancy frameworks. They need **one good tool that returns structured data**. The agent already knows how to reason — it just needs fewer round-trips to get the facts.
+Compression is abstraction. Abstraction enables reasoning. But the deepest win is when the abstraction surfaces patterns that were always there, invisible, waiting for someone to ask.
 
-A 580-line Babashka script beat 134 shell commands. Not because it's smarter, but because it compresses.
+**580 lines of Babashka. 15 MCP tool calls. Findings that 174 grep calls couldn't produce. Born from a human asking an agent what it really wanted.**
 
-## Now Scale It
+## Reproduce It
 
-That was files on disk. One codebase. One machine.
+```bash
+# Install spai
+curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
 
-Your data lives in Postgres, Fuseki, Elasticsearch, Notion, PubMed — scattered across protocols and schemas. An LLM agent trying to explore *that* faces the same problem, worse: composing raw SQL, hand-writing SPARQL, parsing JSON responses, stitching results across backends. Each one is a round-trip. Each one wastes tokens on syntax instead of thinking.
+# Register as MCP server for Claude Code
+claude mcp add --transport stdio spai -- bb ~/.local/share/spai/spai-mcp.bb
 
-SPOQE does for your data silos what `spai` does for your filesystem:
-
-```
-"Find tracks matching 'love', with artist names and review ratings.
- The search index is Elasticsearch. Artists are in the knowledge graph. Reviews are in Postgres."
-```
-
-```clojure
-;; One query. Three backends. Structured results.
-{:sp/pull [(text-search [:mo/Track :dc/title] "love")
-           :dc/title
-           {:foaf/maker [:foaf/name]}
-           {:chinook/reviews [:rating]}]}
+# Run the same analysis on your codebase
+spai drift src/           # What's your hidden coupling?
+spai blast MyFunction     # What breaks if you touch this?
+spai shape src/module/    # What's in here?
+spai errors-rust          # Does it even compile?
 ```
 
-The agent doesn't name a backend. `text-search` is a semantic operation — the planner routes it to Elasticsearch because the catalog says that's where text search lives. Artist names come from the knowledge graph (SPARQL). Reviews come from Postgres (SQL). The agent doesn't write any of those query languages, doesn't join the results, doesn't know the protocols. One question in EDN, structured data back.
+## Make It Yours
 
-Same principle. Same win. Bigger scale.
+spai is built to be extended. Every command in it was born from an agent's frustration — yours will have different frustrations.
 
-**[github.com/Semantic-partners/spoqe](https://github.com/Semantic-partners/spoqe)**
+```bash
+# Ask your agent what it wants
+"What repeated patterns are you doing by hand? What would you build if you could?"
+
+# Then let it build it
+spai new-plugin my-check    # Scaffolds a new plugin with metadata
+```
+
+`spai new-plugin` creates a babashka script with the right structure. Your agent fills in the logic. Next agent in the same environment has the tool automatically — `spai my-check` just works. No registry, no PRs, no gatekeeping.
+
+The best tools don't come from product roadmaps. They come from asking the person doing the work what they keep doing by hand.
