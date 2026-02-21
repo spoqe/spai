@@ -1,5 +1,9 @@
-;; spai/config — project config (.spai/config.edn) and antipatterns
-;; Convention-based project scanning.
+(ns spai.config
+  "Project config (.spai/config.edn) and antipatterns.
+   Convention-based project scanning."
+  (:require [spai.core :as core]
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
 (defn- try-read-config
   "Try to read and parse an EDN config file. Returns parsed value or nil."
@@ -48,7 +52,7 @@
                                  (let [patterns (:patterns v)
                                        exclude  (set (:exclude v))
                                        raw      (->> patterns
-                                                      (mapcat #(grepf % path "-F"))
+                                                      (mapcat #(core/grepf % path "-F"))
                                                       (remove (fn [h]
                                                                 (some #(str/includes? (:file h) %) exclude))))
                                        ;; Dedup: same file+line matched by multiple patterns

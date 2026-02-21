@@ -1,5 +1,10 @@
-;; spai/compose — commands that compose primitives from multiple modules
-;; Loaded after core, code, project, git.
+(ns spai.compose
+  "Commands that compose primitives from multiple modules.
+   Loaded after core, code, project, git."
+  (:require [spai.core :as core]
+            [spai.code :as code]
+            [spai.git :as git]
+            [spai.project :as project]))
 
 (defn blast
   "Blast radius: what breaks if you touch this symbol?
@@ -8,20 +13,20 @@
   [symbol path]
   (let [path     (or path ".")
         ;; 1. Where is it defined?
-        def-data (definition symbol path)
+        def-data (code/definition symbol path)
         defs     (:definitions def-data)
         def-file (-> defs first :file)
         def-line (-> defs first :line)
 
         ;; 2. Who calls it? (usages with enclosing function context)
-        ctx-data (context symbol path)
+        ctx-data (code/context symbol path)
         callers  (:summary ctx-data)
 
         ;; 3. Direct callers by file (deduplicated)
         call-sites (->> (:matches ctx-data)
                         (group-by :file)
                         (mapv (fn [[f hits]]
-                                {:file  (relativize path f)
+                                {:file  (core/relativize path f)
                                  :count (count hits)
                                  :in    (->> hits (keep :in) distinct vec)}))
                         (sort-by :count >)
@@ -29,14 +34,14 @@
 
         ;; 4. Reverse file dependencies: who imports the definition file?
         importers (when def-file
-                    (who def-file path))
+                    (code/who def-file path))
 
         ;; 5. Related tests
-        test-data (tests symbol path)
+        test-data (project/tests symbol path)
 
         ;; 6. Recent git authors on the definition file
         authors   (when def-file
-                    (let [ch (changes def-file 20)]
+                    (let [ch (git/changes def-file 20)]
                       (->> (:commits ch)
                            (map :author)
                            frequencies
@@ -52,7 +57,7 @@
 
     {:symbol      symbol
      :defined-in  (when def-file
-                    {:file (relativize path def-file)
+                    {:file (core/relativize path def-file)
                      :line def-line})
      :definitions (count defs)
 
@@ -66,7 +71,7 @@
      :importers  (when importers
                    (->> (:files importers)
                         (mapv (fn [{:keys [file]}]
-                                (relativize path file)))))
+                                (core/relativize path file)))))
 
      ;; Tests
      :test-files    (:test-files test-data)
@@ -82,7 +87,7 @@
                    :else                           :low)
      :coverage   (if (pos? n-tests) :has-tests :no-tests)
      :summary    (str symbol
-                      (when def-file (str " @ " (relativize path def-file) ":" def-line))
+                      (when def-file (str " @ " (core/relativize path def-file) ":" def-line))
                       " -> " sites " call sites in " n-files " files"
                       ", " deps " importing files"
                       ", " n-tests " test files"

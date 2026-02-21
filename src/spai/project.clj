@@ -1,5 +1,9 @@
-;; spai/project — overview, layout, tests, hotspots, todos
-;; Project structure and discovery commands.
+(ns spai.project
+  "Project structure and discovery: overview, layout, tests, hotspots, todos."
+  (:require [spai.core :as core]
+            [clojure.java.io :as io]
+            [clojure.set :as set]
+            [clojure.string :as str]))
 
 (def ^:private project-files
   "Files that describe a project. Ordered by priority."
@@ -13,7 +17,7 @@
   [path]
   (let [root   (io/file (or path "."))
         files  (->> (.listFiles root)
-                    (remove #(skip-dirs (.getName %)))
+                    (remove #(core/skip-dirs (.getName %)))
                     (sort-by #(.getName %)))
         dirs   (filter #(.isDirectory %) files)
         found  (->> project-files
@@ -22,10 +26,10 @@
                               (when (.exists fp)
                                 {:file f :size (.length fp)}))))
                     vec)
-        lang   (detect-lang (or path "."))
+        lang   (core/detect-lang (or path "."))
         src    (->> (file-seq root)
                     (remove #(.isDirectory %))
-                    (remove #(some skip-dirs (str/split (.getPath %) #"/")))
+                    (remove #(some core/skip-dirs (str/split (.getPath %) #"/")))
                     (map #(.getName %)))]
     {:path       (or path ".")
      :language   lang
@@ -47,10 +51,10 @@
         walk  (fn walk [dir depth]
                 (when (< depth 4)
                   (let [children (->> (.listFiles dir)
-                                      (remove #(skip-dirs (.getName %)))
+                                      (remove #(core/skip-dirs (.getName %)))
                                       (remove #(str/starts-with? (.getName %) "."))
                                       (sort-by #(vector (if (.isDirectory %) 0 1) (.getName %))))]
-                    {:dir   (relativize (str (.getPath root) "/") (.getPath dir))
+                    {:dir   (core/relativize (str (.getPath root) "/") (.getPath dir))
                      :files (->> children (remove #(.isDirectory %)) (mapv #(.getName %)))
                      :subdirs (->> children
                                    (filter #(.isDirectory %))
@@ -77,15 +81,15 @@
                         (filter test-file?)
                         (filter #(str/includes? (str/lower-case %) (str/lower-case term))))
         ;; 2. Files mentioning target that are test files
-        mentions   (->> (grepf term path)
+        mentions   (->> (core/grepf term path)
                         (map :file)
                         distinct
                         (filter test-file?))
         ;; 3. Inline tests: files with test markers whose name or content matches target
-        test-markers (set (->> (grepf "#\\[cfg\\(test\\)\\]|#\\[test\\]|def test_|deftest " path)
+        test-markers (set (->> (core/grepf "#\\[cfg\\(test\\)\\]|#\\[test\\]|def test_|deftest " path)
                                (map :file)
                                distinct))
-        target-files (set (->> (grepf term path) (map :file) distinct))
+        target-files (set (->> (core/grepf term path) (map :file) distinct))
         target-named (->> (file-seq (io/file path))
                           (filter #(.isFile %))
                           (map #(.getPath %))
@@ -104,12 +108,12 @@
   (let [root  (io/file (or path "."))
         files (->> (file-seq root)
                    (filter #(.isFile %))
-                   (remove #(some skip-dirs (str/split (.getPath %) #"/")))
+                   (remove #(some core/skip-dirs (str/split (.getPath %) #"/")))
                    (remove #(str/starts-with? (.getName %) "."))
-                   (filter #(re-find source-exts (.getName %)))
+                   (filter #(re-find core/source-exts (.getName %)))
                    (mapv (fn [f]
                            (let [lines (count (str/split-lines (slurp f)))]
-                             {:file  (relativize (str (.getPath root) "/") (.getPath f))
+                             {:file  (core/relativize (str (.getPath root) "/") (.getPath f))
                               :lines lines})))
                    (sort-by :lines >)
                    (take 20))]
@@ -124,7 +128,7 @@
   "Structured TODO/FIXME/HACK scan. Categorized, sorted, EDN."
   [path]
   (let [path    (or path ".")
-        raw     (or (grepf "TODO|FIXME|HACK|XXX|WARN" path) [])
+        raw     (or (core/grepf "TODO|FIXME|HACK|XXX|WARN" path) [])
         categorize (fn [text]
                      (cond
                        (re-find #"FIXME" text) :fixme
@@ -133,7 +137,7 @@
                        (re-find #"WARN" text)  :warn
                        :else                   :todo))
         items   (->> raw
-                     (remove #(some skip-dirs (str/split (:file %) #"/")))
+                     (remove #(some core/skip-dirs (str/split (:file %) #"/")))
                      (remove #(re-find #"\.(log|lock|json)$" (:file %)))
                      (mapv (fn [m]
                              (assoc m :category (categorize (:text m)))))

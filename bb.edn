@@ -1,0 +1,9 @@
+{:paths ["src" "test"]
+ :deps {cheshire/cheshire {:mvn/version "5.13.0"}}
+ :tasks {test {:doc "Run all tests"
+               :task (do (require '[clojure.test])
+                         (let [nses '[spai.core-test spai.contract-test]]
+                           (doseq [ns nses] (require ns))
+                           (let [results (apply clojure.test/run-tests nses)]
+                             (when (pos? (+ (:fail results) (:error results)))
+                               (System/exit 1)))))}}}
