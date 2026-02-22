@@ -147,7 +147,7 @@
    ;; === Build (replaces cargo build | grep anti-pattern) ===
 
    {:name "errors_rust"
-    :description "Build Rust project, return structured errors AND warnings as EDN. Warnings grouped by lint (dead_code, unused_variables, etc.) with locations and suggestions. ONE call replaces: cargo build 2>&1 | grep. Returns counts, locations, suggestions."
+    :description "Build Rust project, return structured errors AND warnings as EDN. Warnings grouped by lint (dead_code, unused_variables, etc.) with locations and suggestions. ONE call replaces: cargo build 2>&1 | grep. Returns counts, locations, suggestions. Rust only (uses cargo)."
     :inputSchema
     {:type "object"
      :properties
@@ -159,7 +159,7 @@
    ;; === Code exploration (replaces chains of grep/read) ===
 
    {:name "shape"
-    :description "Module structure: all functions, types, impls, imports in a directory, grouped by file. ONE call replaces: 3-4 Grep calls to understand a module's API surface. Use when entering unfamiliar code."
+    :description "Module structure: all functions, types, impls, imports in a directory, grouped by file. ONE call replaces: 3-4 Grep calls to understand a module's API surface. Use when entering unfamiliar code. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected from file extensions."
     :inputSchema
     {:type "object"
      :properties
@@ -170,7 +170,7 @@
      :required ["path"]}}
 
    {:name "who"
-    :description "Reverse dependencies: who imports this file? Use BEFORE editing a file to understand downstream impact. ONE call replaces: grep for the filename across the codebase + manual filtering."
+    :description "Reverse dependencies: who imports this file? Use BEFORE editing a file to understand downstream impact. ONE call replaces: grep for the filename across the codebase + manual filtering. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected."
     :inputSchema
     {:type "object"
      :properties
@@ -181,7 +181,7 @@
      :required ["file"]}}
 
    {:name "blast"
-    :description "Full blast radius for a symbol: definition site, all callers, all importers, related tests, git authors, risk assessment. ONE call replaces: grep for definition + grep for usages + grep for test files + git log. Use before renaming, deleting, or changing a function's signature."
+    :description "Full blast radius for a symbol: definition site, all callers, all importers, related tests, git authors, risk assessment. ONE call replaces: grep for definition + grep for usages + grep for test files + git log. Use before renaming, deleting, or changing a function's signature. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected."
     :inputSchema
     {:type "object"
      :properties
@@ -192,7 +192,7 @@
      :required ["symbol"]}}
 
    {:name "context"
-    :description "Symbol usages WITH enclosing function names — see WHICH functions call a symbol, not just line numbers. ONE call replaces: grep for symbol + manually reading surrounding code to find the caller. Use to understand how a function is used across the codebase."
+    :description "Symbol usages WITH enclosing function names — see WHICH functions call a symbol, not just line numbers. ONE call replaces: grep for symbol + manually reading surrounding code to find the caller. Use to understand how a function is used across the codebase. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected."
     :inputSchema
     {:type "object"
      :properties
@@ -205,7 +205,7 @@
    ;; === Git-powered analysis (no built-in equivalent) ===
 
    {:name "related"
-    :description "Co-change analysis: files that move together in git history, revealing implicit coupling. If file A changes, which other files usually change too? Use BEFORE refactoring to find hidden dependencies that imports don't show. ONE call replaces: git log --follow + manual correlation across commits."
+    :description "Co-change analysis: files that move together in git history, revealing implicit coupling. If file A changes, which other files usually change too? Use BEFORE refactoring to find hidden dependencies that imports don't show. ONE call replaces: git log --follow + manual correlation across commits. Language-agnostic (git-based)."
     :inputSchema
     {:type "object"
      :properties
@@ -214,7 +214,7 @@
      :required ["file"]}}
 
    {:name "drift"
-    :description "Architecture health: where implicit coupling (co-change) diverges from explicit coupling (imports). Finds files that SHOULD be in the same module but aren't, or files in the same module that never change together. Use to understand architecture debt before large refactors."
+    :description "Architecture health: where implicit coupling (co-change) diverges from explicit coupling (imports). Finds files that SHOULD be in the same module but aren't, or files in the same module that never change together. Use to understand architecture debt before large refactors. Language-agnostic (git-based)."
     :inputSchema
     {:type "object"
      :properties
@@ -222,7 +222,7 @@
              :description "Directory scope (optional)"}}}}
 
    {:name "narrative"
-    :description "Biography of a file: creation, growth phases, major refactors, stabilization. Tells the STORY of how code got to its current state. Use when inheriting unfamiliar code to understand its evolution before making changes."
+    :description "Biography of a file: creation, growth phases, major refactors, stabilization. Tells the STORY of how code got to its current state. Use when inheriting unfamiliar code to understand its evolution before making changes. Language-agnostic (git-based)."
     :inputSchema
     {:type "object"
      :properties
