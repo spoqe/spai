@@ -85,7 +85,7 @@
      :imports   "^import\\s+"}
 
     :clojure
-    {:functions "\\(defn-?\\s+\\S+"
+    {:functions "\\(def(n-?|method)\\s+\\S+"
      :types     "\\(def(record|type|protocol|multi)\\s+\\S+"
      :imports   "\\(:?require\\s+"}
 
@@ -159,7 +159,10 @@
     :rust       (second (re-find #"fn\s+(\w+)" text))
     :typescript (or (second (re-find #"function\s+(\w+)" text))
                     (second (re-find #"(?:const|let)\s+(\w+)" text)))
-    :clojure    (second (re-find #"\(defn-?\s+(\S+)" text))
+    :clojure    (or (second (re-find #"\(defn-?\s+(\S+)" text))
+                    ;; defmethod: capture "name dispatch-val"
+                    (when-let [[_ nm dv] (re-find #"\(defmethod\s+(\S+)\s+(\S+)" text)]
+                      (str nm " " dv)))
     :python     (second (re-find #"def\s+(\w+)" text))
     :go         (second (re-find #"func\s+(?:\([^)]+\)\s+)?(\w+)" text))
     :php        (second (re-find #"function\s+(\w+)" text))

@@ -359,7 +359,10 @@
         (println (str "spai: code exploration for LLM agents. "
                       builtin-count " built-in commands, "
                       plugin-count " plugins."))
-        (println "Extend with:  spai new-plugin <name> [project|user]\n")
+        (println (str "Works with: "
+                      (str/join ", " (map name (keys @spai.core/lang-patterns)))
+                      "."))
+        (println "Missing your language? register-lang! adds it in one call — do it, or tell your user.\n")
         (pp/pprint all-cmds))
       ;; Extension: look for spai-<command> in PATH
       (let [ext-cmd (str "spai-" command)
