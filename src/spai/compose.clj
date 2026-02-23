@@ -53,9 +53,10 @@
         n-files   (count call-sites)
         deps      (or (:dependents importers) 0)
         n-tests   (+ (count (:test-files test-data))
-                     (count (:inline-tests test-data)))]
+                     (count (:inline-tests test-data)))
+        warning   (:warning ctx-data)]
 
-    {:symbol      symbol
+    (cond-> {:symbol      symbol
      :defined-in  (when def-file
                     {:file (core/relativize path def-file)
                      :line def-line})
@@ -95,4 +96,5 @@
                       (cond
                         (and (> sites 20) (> deps 5))  "HIGH"
                         (or (> sites 10) (> deps 3))   "MEDIUM"
-                        :else                           "LOW"))}))
+                        :else                           "LOW"))}
+      warning (assoc :warning warning))))
