@@ -34,6 +34,16 @@
       {:content [{:type "text" :text (:out result)}]}
       {:content [{:type "text"
                   :text (str (:out result) "\n" (:err result))}]
+       :isError true}))) 
+
+ (defn run-spai-edit [& args]
+  (log "running:" (str/join " " (cons "spai-edit" args)))
+  (let [edit-script (str (System/getProperty "user.home") "/.local/share/spai/spai-edit.clj")
+        result (apply sh "bb" edit-script (map str args))]
+    (if (zero? (:exit result))
+      {:content [{:type "text" :text (:out result)}]}
+      {:content [{:type "text"
+                  :text (str (:out result) "\n" (:err result))}]
        :isError true})))
 
 ;; --- Update check (runs once at startup, result cached) ---
@@ -159,7 +169,7 @@
    ;; === Code exploration (replaces chains of grep/read) ===
 
    {:name "shape"
-    :description "Module structure: all functions, types, impls, imports in a directory, grouped by file. ONE call replaces: 3-4 Grep calls to understand a module's API surface. Use when entering unfamiliar code. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected from file extensions."
+    :description "Module structure: all functions, types, impls, imports in a directory, grouped by file. ONE call replaces: 3-4 Grep calls to understand a module's API surface. Use when entering unfamiliar code. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java, Swift — auto-detected from file extensions."
     :inputSchema
     {:type "object"
      :properties
@@ -170,7 +180,7 @@
      :required ["path"]}}
 
    {:name "who"
-    :description "Reverse dependencies: who imports this file? Use BEFORE editing a file to understand downstream impact. ONE call replaces: grep for the filename across the codebase + manual filtering. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected."
+    :description "Reverse dependencies: who imports this file? Use BEFORE editing a file to understand downstream impact. ONE call replaces: grep for the filename across the codebase + manual filtering. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java, Swift — auto-detected."
     :inputSchema
     {:type "object"
      :properties
@@ -181,7 +191,7 @@
      :required ["file"]}}
 
    {:name "blast"
-    :description "Full blast radius for a symbol: definition site, all callers, all importers, related tests, git authors, risk assessment. ONE call replaces: grep for definition + grep for usages + grep for test files + git log. Use before renaming, deleting, or changing a function's signature. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected."
+    :description "Full blast radius for a symbol: definition site, all callers, all importers, related tests, git authors, risk assessment. ONE call replaces: grep for definition + grep for usages + grep for test files + git log. Use before renaming, deleting, or changing a function's signature. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java, Swift — auto-detected."
     :inputSchema
     {:type "object"
      :properties
@@ -192,7 +202,7 @@
      :required ["symbol"]}}
 
    {:name "context"
-    :description "Symbol usages WITH enclosing function names — see WHICH functions call a symbol, not just line numbers. ONE call replaces: grep for symbol + manually reading surrounding code to find the caller. Use to understand how a function is used across the codebase. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java — auto-detected."
+    :description "Symbol usages WITH enclosing function names — see WHICH functions call a symbol, not just line numbers. ONE call replaces: grep for symbol + manually reading surrounding code to find the caller. Use to understand how a function is used across the codebase. Languages: Rust, TypeScript, Clojure, Python, Go, PHP, Java, Swift — auto-detected."
     :inputSchema
     {:type "object"
      :properties
@@ -229,6 +239,63 @@
      {:file {:type "string"
              :description "File to get the history narrative for"}}
      :required ["file"]}}
+
+   ;; === Structural editing for Clojure/EDN (replaces text Edit on s-expressions) ===
+
+   {:name "clj_validate"
+    :description "Structural validation of a Clojure/EDN file. Can it be parsed? Returns first error with location. Use AFTER any Edit to .clj/.cljs/.edn/.bb files to catch paren mismatches immediately. ONE call replaces: hoping your parens are balanced."
+    :inputSchema
+    {:type "object"
+     :properties
+     {:file {:type "string"
+             :description "Path to the Clojure/EDN file to validate"}}
+     :required ["file"]}}
+
+   {:name "clj_forms"
+    :description "List all top-level forms in a Clojure/EDN file with names, types, and line numbers. Use to understand file structure before editing. ONE call replaces: reading the whole file to find where a defn lives."
+    :inputSchema
+    {:type "object"
+     :properties
+     {:file {:type "string"
+             :description "Path to the Clojure/EDN file"}}
+     :required ["file"]}}
+
+   {:name "clj_find_form"
+    :description "Find a named top-level form (defn, def, defmethod, etc.) and return its full source. Structural boundary — no line counting. Use to read a specific function without guessing line ranges."
+    :inputSchema
+    {:type "object"
+     :properties
+     {:file {:type "string"
+             :description "Path to the Clojure/EDN file"}
+      :name {:type "string"
+             :description "Name of the form to find (e.g. 'shape-raw', 'tools')"}}
+     :required ["file" "name"]}}
+
+   {:name "clj_replace_form"
+    :description "Replace an entire named top-level form with new source. Writes the file. Structurally safe — operates on the AST, not text lines. Use instead of Edit for Clojure files to avoid paren mismatch bugs. IMPORTANT: the new_source must be a complete, valid s-expression."
+    :inputSchema
+    {:type "object"
+     :properties
+     {:file {:type "string"
+             :description "Path to the Clojure/EDN file"}
+      :name {:type "string"
+             :description "Name of the form to replace"}
+      :new_source {:type "string"
+                   :description "Complete new source for the form (must be valid Clojure)"}}
+     :required ["file" "name" "new_source"]}}
+
+   {:name "clj_insert_after"
+    :description "Insert a new top-level form after a named form. Preserves spacing. Use to add new defns, defmethods, etc. at the right location in a file."
+    :inputSchema
+    {:type "object"
+     :properties
+     {:file {:type "string"
+             :description "Path to the Clojure/EDN file"}
+      :name {:type "string"
+             :description "Name of the form to insert after"}
+      :new_source {:type "string"
+                   :description "Source of the new form to insert (must be valid Clojure)"}}
+     :required ["file" "name" "new_source"]}}
 
    ;; === Update (dynamic description set at tools/list time) ===
 
@@ -336,6 +403,23 @@
     (if (get args "install")
       (run-spai "update" "--install")
       (run-spai "update"))
+
+    ;; === Structural editing ===
+
+    "clj_validate"
+    (run-spai-edit "validate" (get args "file"))
+
+    "clj_forms"
+    (run-spai-edit "forms" (get args "file"))
+
+    "clj_find_form"
+    (run-spai-edit "find-form" (get args "file") (get args "name"))
+
+    "clj_replace_form"
+    (run-spai-edit "replace-form" (get args "file") (get args "name") (get args "new_source"))
+
+    "clj_insert_after"
+    (run-spai-edit "insert-after" (get args "file") (get args "name") (get args "new_source"))
 
     ;; Unknown
     {:content [{:type "text" :text (str "Unknown tool: " name)}]

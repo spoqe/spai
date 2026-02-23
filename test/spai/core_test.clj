@@ -12,11 +12,24 @@
     (is (= :clojure (core/detect-lang "src/spai/analytics.clj"))))
   (testing "non-existent file falls through to directory sampling"
     ;; detect-lang checks .isFile first; non-existent files sample the parent dir
-    (is (keyword? (core/detect-lang "src/spai/core.clj")) "always returns a keyword")))
+    (is (keyword? (core/detect-lang "src/spai/core.clj")) "always returns a keyword"))
+  (testing "unknown extension returns :unknown"
+    (is (= :unknown (core/detect-lang "foo.xyz")))))
 
 (deftest detect-lang-directory
   (testing "detects clojure from spai's own source"
     (is (= :clojure (core/detect-lang "src/spai")))))
+
+(deftest resolve-lang-test
+  (testing "known language passes through"
+    (let [[lang warning] (core/resolve-lang :clojure)]
+      (is (= :clojure lang))
+      (is (nil? warning))))
+  (testing ":unknown falls back to :rust with warning"
+    (let [[lang warning] (core/resolve-lang :unknown)]
+      (is (= :rust lang))
+      (is (string? warning))
+      (is (re-find #"lang-patterns" warning) "warning mentions where to add patterns"))))
 
 ;; -------------------------------------------------------------------
 ;; extract-fn-name

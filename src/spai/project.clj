@@ -26,23 +26,24 @@
                               (when (.exists fp)
                                 {:file f :size (.length fp)}))))
                     vec)
-        lang   (core/detect-lang (or path "."))
+        [lang warning] (core/resolve-lang (core/detect-lang (or path ".")))
         src    (->> (file-seq root)
                     (remove #(.isDirectory %))
                     (remove #(some core/skip-dirs (str/split (.getPath %) #"/")))
                     (map #(.getName %)))]
-    {:path       (or path ".")
-     :language   lang
-     :config     found
-     :dirs       (mapv #(.getName %) dirs)
-     :file-count (count src)
-     :by-extension (->> src
-                        (map #(let [n %] (when-let [i (str/last-index-of n ".")] (subs n i))))
-                        (remove nil?)
-                        frequencies
-                        (sort-by val >)
-                        (take 15)
-                        vec)}))
+    (cond-> {:path       (or path ".")
+             :language   lang
+             :config     found
+             :dirs       (mapv #(.getName %) dirs)
+             :file-count (count src)
+             :by-extension (->> src
+                                (map #(let [n %] (when-let [i (str/last-index-of n ".")] (subs n i))))
+                                (remove nil?)
+                                frequencies
+                                (sort-by val >)
+                                (take 15)
+                                vec)}
+      warning (assoc :warning warning))))
 
 (defn layout
   "Smart directory tree. Skips noise dirs, shows file counts per directory."

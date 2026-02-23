@@ -107,7 +107,13 @@
     :java
     {:functions "^\\s*(public|protected|private)?\\s*(static\\s+)?(synchronized\\s+)?(abstract\\s+)?[\\w<>\\[\\],\\s]+\\s+\\w+\\s*\\("
      :types     "^\\s*(public|protected|private)?\\s*(static\\s+)?(abstract\\s+|final\\s+)?(class|interface|enum|record|@interface)\\s+\\w+"
-     :imports   "^import\\s+"}}))
+     :imports   "^import\\s+"}
+
+    :swift
+    {:functions "^\\s*(@\\w+(\\([^)]*\\))?\\s+)*(open\\s+|public\\s+|internal\\s+|fileprivate\\s+|private\\s+)?(static\\s+|class\\s+|override\\s+|mutating\\s+|nonisolated\\s+)*func\\s+\\w+"
+     :types     "^\\s*(open\\s+|public\\s+|internal\\s+|fileprivate\\s+|private\\s+)?(final\\s+)?(struct|class|enum|protocol|actor)\\s+\\w+"
+     :impls     "^\\s*(open\\s+|public\\s+|internal\\s+|fileprivate\\s+|private\\s+)?extension\\s+\\w+"
+     :imports   "^(@testable\\s+)?import\\s+"}}))
 
 (defn register-lang!
   "Register grep patterns for a new language. Extends spai to support any language.
@@ -132,7 +138,8 @@
           (str/ends-with? name ".go")                           :go
           (str/ends-with? name ".php")                          :php
           (str/ends-with? name ".java")                         :java
-          :else                                                 :rust))
+          (str/ends-with? name ".swift")                        :swift
+          :else                                                 :unknown))
       ;; Directory - sample first 100 files
       (let [files (->> (file-seq f)
                        (filter #(.isFile %))
@@ -148,7 +155,24 @@
           (some #(str/ends-with? % ".go") files)                :go
           (some #(str/ends-with? % ".php") files)              :php
           (some #(str/ends-with? % ".java") files)             :java
-          :else                                                 :rust)))))
+          (some #(str/ends-with? % ".swift") files)            :swift
+          :else                                                 :unknown)))))
+
+(def ^:private core-clj-path
+  "Absolute path to this file, for use in warnings."
+  (try (.getCanonicalPath (io/file *file*))
+       (catch Exception _ "src/spai/core.clj")))
+
+(defn resolve-lang
+  "Resolve detected language. Returns [effective-lang warning-or-nil].
+   When detect-lang returns :unknown, falls back to :rust patterns and
+   includes a warning with the file path for adding new language support."
+  [detected]
+  (if (= detected :unknown)
+    [:rust (str "No language patterns matched. Using Rust patterns as best guess.\n"
+                "To add your language, edit: " core-clj-path "\n"
+                "Look for lang-patterns — add an entry like the existing ones.")]
+    [detected nil]))
 
 ;; -------------------------------------------------------------------
 ;; Name extraction
@@ -167,6 +191,7 @@
     :go         (second (re-find #"func\s+(?:\([^)]+\)\s+)?(\w+)" text))
     :php        (second (re-find #"function\s+(\w+)" text))
     :java       (second (re-find #"(\w+)\s*\(" text))
+    :swift      (second (re-find #"func\s+(\w+)" text))
     nil))
 
 (defn extract-type-name [text]
@@ -182,6 +207,7 @@
     (re-find #"\btype\b" text)      :type
     (re-find #"\bprotocol\b" text)  :protocol
     (re-find #"\brecord\b" text)    :record
+    (re-find #"\bactor\b" text)    :actor
     :else                           :unknown))
 
 (defn relativize
@@ -199,4 +225,4 @@
 
 (def source-exts
   "Source file extensions we care about."
-  #"\.(rs|ts|tsx|js|jsx|py|go|clj|cljs|java|rb|php)$")
+  #"\.(rs|ts|tsx|js|jsx|py|go|clj|cljs|java|rb|php|swift)$")

@@ -8,32 +8,35 @@
 (defn shape-raw
   "Gather all definitions. Returns flat lists with full detail."
   [path]
-  (let [lang (core/detect-lang path)
+  (let [[lang warning] (core/resolve-lang (core/detect-lang path))
         pats (get @core/lang-patterns lang)]
     (when pats
       (let [find-matches (fn [pat-key]
                            (when-let [pat (get pats pat-key)]
                              (core/grepf pat path)))]
-        {:lang      lang
-         :functions (->> (find-matches :functions)
-                         (mapv (fn [m]
-                                 (assoc m :name (core/extract-fn-name (:text m) lang)))))
-         :types     (->> (find-matches :types)
-                         (mapv (fn [m]
-                                 (assoc m
-                                        :name (core/extract-type-name (:text m))
-                                        :kind (core/extract-type-kind (:text m))))))
-         :impls     (when (:impls pats)
-                      (->> (find-matches :impls)
+        (cond->
+          {:lang      lang
+           :functions (->> (find-matches :functions)
                            (mapv (fn [m]
-                                   (assoc m :name
-                                          (second (re-find #"impl(?:<[^>]*>)?\s+(\w+)" (:text m))))))))
-         :modules   (when (:mods pats)
-                      (->> (find-matches :mods)
+                                   (assoc m :name (core/extract-fn-name (:text m) lang)))))
+           :types     (->> (find-matches :types)
                            (mapv (fn [m]
-                                   (assoc m :name
-                                          (second (re-find #"mod\s+(\w+)" (:text m))))))))
-         :imports   (vec (find-matches :imports))}))))
+                                   (assoc m
+                                          :name (core/extract-type-name (:text m))
+                                          :kind (core/extract-type-kind (:text m))))))
+           :impls     (when (:impls pats)
+                        (->> (find-matches :impls)
+                             (mapv (fn [m]
+                                     (assoc m :name
+                                            (or (second (re-find #"impl(?:<[^>]*>)?\s+(\w+)" (:text m)))
+                                                (second (re-find #"extension\s+(\w+)" (:text m)))))))))
+           :modules   (when (:mods pats)
+                        (->> (find-matches :mods)
+                             (mapv (fn [m]
+                                     (assoc m :name
+                                            (second (re-find #"mod\s+(\w+)" (:text m))))))))
+           :imports   (vec (find-matches :imports))}
+          warning (assoc :warning warning))))))
 
 (defn shape
   "Module structure grouped by file. Summary by default, :full for detail."
@@ -43,7 +46,8 @@
       {:path path :error "No patterns for this language yet"}
       (if full
         ;; Full mode: everything, flat lists (original behavior)
-        (assoc raw :path path :language (:lang raw))
+        (cond-> (assoc raw :path path :language (:lang raw))
+          (:warning raw) (assoc :warning (:warning raw)))
         ;; Summary mode: grouped by file, just names
         (let [all-defs (concat
                          (map #(assoc % :kind-group :function) (:functions raw))
@@ -69,19 +73,21 @@
                                        :functions fns
                                        :types types
                                        :impls impls}))))]
-          {:path     path
-           :language (:lang raw)
-           :files    by-file})))))
+          (cond-> {:path     path
+                   :language (:lang raw)
+                   :files    by-file}
+            (:warning raw) (assoc :warning (:warning raw))))))))
 
 (defn usages
   "Find where a symbol is used. Word-boundary match, excludes lock/json files."
   [symbol path]
   (let [path    (or path ".")
         type-args (if @core/has-rg?
-                    ["-g" "*.{rs,clj,cljs,ts,tsx,py,go,php,edn,toml,md}"]
+                    ["-g" "*.{rs,clj,cljs,ts,tsx,py,go,php,java,swift,edn,toml,md}"]
                     ["--include=*.rs" "--include=*.clj" "--include=*.ts"
                      "--include=*.tsx" "--include=*.py" "--include=*.go"
-                     "--include=*.php" "--include=*.edn" "--include=*.toml"
+                     "--include=*.php" "--include=*.java" "--include=*.swift"
+                     "--include=*.edn" "--include=*.toml"
                      "--include=*.md"])
         matches (or (apply core/grepf symbol path "-w" type-args)
                     [])]
@@ -121,22 +127,24 @@
    :python     #"^\s*(async\s+)?(def|class)\s+"
    :go         #"^(func|type|var|const)\s+"
    :php        #"^\s*(public|protected|private)?\s*(static\s+)?(function|class|interface|trait|enum|abstract\s+class|final\s+class)\s+"
-   :java       #"^\s*(public|protected|private)?\s*(static\s+)?(abstract\s+)?(class|interface|enum|record|@interface|void|int|long|boolean|String|[A-Z]\w+)\s+"})
+   :java       #"^\s*(public|protected|private)?\s*(static\s+)?(abstract\s+)?(class|interface|enum|record|@interface|void|int|long|boolean|String|[A-Z]\w+)\s+"
+   :swift      #"^\s*(@\w+(\([^)]*\))?\s+)*(open\s+|public\s+|internal\s+|fileprivate\s+|private\s+)?(static\s+|class\s+|override\s+|mutating\s+)?(func|struct|class|enum|protocol|actor|extension|typealias|let|var)\s+"})
 
 (defn definition
   "Find where a symbol is defined. Filters usages to definition-site patterns."
   [symbol path]
   (let [path    (or path ".")
-        lang    (core/detect-lang path)
+        [lang warning] (core/resolve-lang (core/detect-lang path))
         def-pat (get def-patterns lang)
         all     (:matches (usages symbol path))]
-    {:symbol symbol
-     :path   path
-     :definitions
-     (vec (if def-pat
-            (filter #(re-find def-pat (:text %)) all)
-            ;; No def pattern for this lang - return all matches (fallback)
-            all))}))
+    (cond-> {:symbol symbol
+             :path   path
+             :definitions
+             (vec (if def-pat
+                    (filter #(re-find def-pat (:text %)) all)
+                    ;; No def pattern for this lang - return all matches (fallback)
+                    all))}
+      warning (assoc :warning warning))))
 
 (defn sig
   "API surface: function signatures for a module. The header file view."
@@ -167,7 +175,8 @@
    :go         {:pattern "^import\\s+" :extract #"\"([^\"]+)\""}
    :php        {:pattern "^\\s*(use|require|require_once|include|include_once)\\s+"
                 :extract #"(?:use|require|require_once|include|include_once)\s+(\S+)"}
-   :java       {:pattern "^import\\s+" :extract #"import\s+(?:static\s+)?([^;]+)"}})
+   :java       {:pattern "^import\\s+" :extract #"import\s+(?:static\s+)?([^;]+)"}
+   :swift      {:pattern "^(@testable\\s+)?import\\s+" :extract #"import\s+(\w+)"}})
 
 (defn who
   "Reverse file dependencies. Who imports/uses this file?
@@ -306,6 +315,15 @@
                     :line   (:line h)
                     :kind   (if (re-find #"^import\s+static\s+" (:text h)) :static-import :import)}))))))
 
+(defmethod extract-imports :swift [_ file-path]
+  (let [hits (or (core/grepf "^(@testable\\s+)?import\\s+" file-path) [])]
+    (->> hits
+         (keep (fn [h]
+                 (when-let [[_ _ mod-name] (re-find #"^(@testable\s+)?import\s+(\w+)" (:text h))]
+                   {:module mod-name
+                    :line   (:line h)
+                    :kind   (if (re-find #"^@testable" (:text h)) :testable-import :import)}))))))
+
 (defmethod extract-imports :default [lang file-path]
   (when-let [ip (get import-patterns lang)]
     (let [hits (or (core/grepf (:pattern ip) file-path) [])]
@@ -358,6 +376,16 @@
       (if (or (.exists (io/file dir "pom.xml"))
               (.exists (io/file dir "build.gradle"))
               (.exists (io/file dir "build.gradle.kts")))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defmethod find-project-root :swift [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (or (.exists (io/file dir "Package.swift"))
+              (some #(str/ends-with? (.getName %) ".xcodeproj")
+                    (.listFiles dir)))
         (.getCanonicalPath dir)
         (recur (.getParentFile dir))))))
 
@@ -504,6 +532,7 @@
                         (str/starts-with? mod-str "org.xml.")
                         (str/starts-with? mod-str "org.ietf."))
                   :external :probe)
+    :swift      :external  ;; Swift imports are always module-level (no relative imports)
     :clojure    :unknown
     :go         :unknown
     :unknown))
@@ -514,7 +543,7 @@
    Directory: full graph with hub/load-bearing analysis."
   [path]
   (let [path (or path ".")
-        lang (core/detect-lang path)
+        [lang warning] (core/resolve-lang (core/detect-lang path))
         f    (io/file path)]
     (if-not (get import-patterns lang)
       {:path path :error "No import patterns for this language yet"}
@@ -568,7 +597,8 @@
                             :external (vec (distinct (map :module (filter #(#{:external :unknown} (:scope %)) imports))))}))
                        files)]
         (if (.isFile f)
-          (first entries)
+          (cond-> (first entries)
+            warning (assoc :warning warning))
           (let [rev-deps (reduce
                            (fn [acc entry]
                              (reduce (fn [a imp]
@@ -595,13 +625,14 @@
                               (sort-by val >)
                               (take 15)
                               vec)]
-            {:path          path
-             :language      lang
-             :total-files   (count entries)
-             :hubs          hubs
-             :load-bearing  load-bearing
-             :external-deps ext-freq
-             :graph         entries}))))))
+            (cond-> {:path          path
+                     :language      lang
+                     :total-files   (count entries)
+                     :hubs          hubs
+                     :load-bearing  load-bearing
+                     :external-deps ext-freq
+                     :graph         entries}
+              warning (assoc :warning warning))))))))
 
 ;; -------------------------------------------------------------------
 ;; context — usages with enclosing function
@@ -612,11 +643,12 @@
    'called from handle_query, plan_step, and execute_bridge.'"
   [symbol path]
   (let [path    (or path ".")
-        lang    (core/detect-lang path)
+        [lang warning] (core/resolve-lang (core/detect-lang path))
         fn-pat  (get-in @core/lang-patterns [lang :functions])
         matches (:matches (usages symbol path))]
     (if-not fn-pat
-      {:symbol symbol :path path :matches matches}
+      (cond-> {:symbol symbol :path path :matches matches}
+        warning (assoc :warning warning))
       ;; For each match, find the nearest preceding function definition in the same file
       (let [;; Get all function definitions
             all-fns (->> (core/grepf fn-pat path)
@@ -632,16 +664,17 @@
                                                        first)]
                                     (assoc m :in (when enclosing
                                                    (core/extract-fn-name (:text enclosing) lang)))))))]
-        {:symbol   symbol
-         :path     path
-         :count    (count enriched)
-         :matches  enriched
-         :summary  (->> enriched
-                        (map :in)
-                        (remove nil?)
-                        frequencies
-                        (sort-by val >)
-                        vec)}))))
+        (cond-> {:symbol   symbol
+                 :path     path
+                 :count    (count enriched)
+                 :matches  enriched
+                 :summary  (->> enriched
+                                (map :in)
+                                (remove nil?)
+                                frequencies
+                                (sort-by val >)
+                                vec)}
+          warning (assoc :warning warning))))))
 
 ;; -------------------------------------------------------------------
 ;; patterns — inductive convention discovery
