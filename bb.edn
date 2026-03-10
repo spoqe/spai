@@ -1,5 +1,4 @@
 {:paths ["src" "test"]
- :deps {cheshire/cheshire {:mvn/version "5.13.0"}}
  :tasks {test {:doc "Run all tests"
                :task (do (require '[clojure.test])
                          (let [nses '[spai.core-test spai.contract-test]]
