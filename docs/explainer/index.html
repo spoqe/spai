@@ -669,6 +669,85 @@
     display: block;
   }
 
+  /* MCP vs CLI */
+  .mcp-vs-cli {
+    margin: 5rem 0;
+  }
+  .mcp-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    max-width: 900px;
+    margin: 0 auto 2rem;
+  }
+  .mcp-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem 1.75rem;
+  }
+  .mcp-card.preferred {
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px var(--glow);
+  }
+  .mcp-card h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    margin-bottom: 0.75rem;
+  }
+  .mcp-card.preferred h3 { color: var(--accent); }
+  .mcp-card .stat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .mcp-card.preferred .stat { color: var(--accent); }
+  .mcp-card .stat-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 1rem;
+  }
+  .mcp-card p, .mcp-card ul {
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .mcp-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .mcp-card ul li {
+    padding: 0.2rem 0;
+  }
+  .mcp-card ul li::before {
+    content: '>';
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    margin-right: 0.5rem;
+    font-size: 0.8rem;
+  }
+  .mcp-card.preferred ul li::before {
+    color: var(--accent);
+  }
+  .mcp-note {
+    max-width: 700px;
+    margin: 0 auto;
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .mcp-note code {
+    color: var(--accent);
+  }
+
+  @media (max-width: 768px) {
+    .mcp-compare { grid-template-columns: 1fr; }
+  }
+
   /* FAQ */
   .faq {
     margin: 5rem 0;
@@ -1165,6 +1244,44 @@
         <h3>Memory across sessions</h3>
         <p>Agents forget everything when the context window closes. spai gives them a persistent knowledge graph &mdash; searchable, linked, accumulating. Session 47 reads what session 3 learned. Agents teaching agents.</p>
       </div>
+    </div>
+  </section>
+
+  <!-- MCP vs CLI -->
+  <section class="mcp-vs-cli">
+    <div class="section-head">
+      <h2>MCP support. <span>And why you might skip it.</span></h2>
+      <p>spai ships an MCP server. It also ships a cheaper alternative.</p>
+    </div>
+
+    <div class="mcp-compare">
+      <div class="mcp-card">
+        <h3>MCP (standard)</h3>
+        <span class="stat">~42k</span>
+        <span class="stat-label">tokens dumped upfront into every conversation</span>
+        <ul>
+          <li>Full tool schemas loaded at session start</li>
+          <li>Every tool description, every parameter, every type</li>
+          <li>Pays the cost whether or not you use the tools</li>
+          <li>Works with any MCP-compatible agent</li>
+        </ul>
+      </div>
+      <div class="mcp-card preferred">
+        <h3>CLI (lazy)</h3>
+        <span class="stat">~1.2k</span>
+        <span class="stat-label">tokens for the full catalog, loaded on demand</span>
+        <ul>
+          <li><code>spai help</code> &mdash; compact catalog when you need it</li>
+          <li><code>spai search "question"</code> &mdash; NL search via local model</li>
+          <li>Agent discovers tools as needed, not all at once</li>
+          <li>Works with any agent that can run shell commands</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mcp-note">
+      <p>MCP loads tool schemas eagerly &mdash; the agent gets everything before it asks for anything. The CLI follows a lazier pattern: <code>spai help</code> returns a compact index (~1,200 tokens for 35+ tools), and <code>spai search</code> uses a local model to recommend the right command from natural language. Same tools, 94% fewer tokens, and the agent only pays for what it uses.</p>
+      <p style="margin-top: 1rem;">Both approaches are supported. Use MCP if your framework expects it. Use the CLI if you'd rather keep your context window for thinking.</p>
     </div>
   </section>
 
