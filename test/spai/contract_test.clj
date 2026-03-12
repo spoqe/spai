@@ -65,7 +65,7 @@
                 :call #(compose/blast "grepf" "src/spai")}
    :stats      {:keys #{:total :by-command :top-paths :recent}
                 :call #(analytics/stats)}
-   :reflect    {:keys #{:total-calls :explored-paths :project-commands :repeated-sequences :plugins}
+   :reflect    {:keys #{:total-calls :explored-paths :spai-commands :repeated-sequences :plugins}
                 :call #(analytics/reflect)}})
 
 ;; -------------------------------------------------------------------
