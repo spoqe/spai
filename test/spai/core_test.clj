@@ -13,6 +13,19 @@
   (testing "non-existent file falls through to directory sampling"
     ;; detect-lang checks .isFile first; non-existent files sample the parent dir
     (is (keyword? (core/detect-lang "src/spai/core.clj")) "always returns a keyword"))
+  (testing "new language extensions (file-based detection)"
+    ;; detect-lang checks .isFile, so we need real files
+    (let [tmp (System/getProperty "java.io.tmpdir")
+          files [["test.scala" :scala] ["test.sc" :scala]
+                 ["test.rb" :ruby]
+                 ["test.kt" :kotlin] ["test.kts" :kotlin]]]
+      (doseq [[fname expected] files]
+        (let [f (java.io.File. tmp fname)]
+          (spit f "")
+          (try
+            (is (= expected (core/detect-lang (.getPath f)))
+                (str fname " should detect as " expected))
+            (finally (.delete f)))))))
   (testing "unknown extension returns :unknown"
     (is (= :unknown (core/detect-lang "foo.xyz")))))
 
@@ -56,6 +69,25 @@
   (is (= "main"   (core/extract-fn-name "func main() {" :go)))
   (is (= "String" (core/extract-fn-name "func (s *Server) String() string {" :go))))
 
+(deftest extract-fn-name-scala
+  (is (= "greet"   (core/extract-fn-name "def greet(name: String): String" :scala)))
+  (is (= "version" (core/extract-fn-name "val version = \"1.0\"" :scala)))
+  (is (= "count"   (core/extract-fn-name "var count = 0" :scala))))
+
+(deftest extract-fn-name-ruby
+  (is (= "validate" (core/extract-fn-name "def self.validate(token)" :ruby)))
+  (is (= "initialize" (core/extract-fn-name "def initialize(secret)" :ruby)))
+  (is (= "full_name" (core/extract-fn-name "def full_name" :ruby))))
+
+(deftest extract-fn-name-kotlin
+  (is (= "loadUsers" (core/extract-fn-name "suspend fun loadUsers(): Flow<List<User>>" :kotlin)))
+  (is (= "isLoading" (core/extract-fn-name "val isLoading: Boolean = false" :kotlin)))
+  (is (= "validate"  (core/extract-fn-name "private fun validate(user: User): Boolean" :kotlin))))
+
+(deftest extract-fn-name-swift
+  (is (= "viewDidLoad" (core/extract-fn-name "override func viewDidLoad()" :swift)))
+  (is (= "fetch"       (core/extract-fn-name "public func fetch() async throws" :swift))))
+
 (deftest extract-fn-name-unknown-lang
   (is (nil? (core/extract-fn-name "fn foo()" :unknown-lang))))
 
@@ -70,6 +102,9 @@
   (is (= "App"        (core/extract-type-name "class App {")))
   (is (= "Renderable" (core/extract-type-name "interface Renderable {")))
   (is (= "Name"       (core/extract-type-name "type Name = String")))
+  (is (= "Main"       (core/extract-type-name "object Main {")))
+  (is (= "Auth"       (core/extract-type-name "module Auth")))
+  (is (= "Role"       (core/extract-type-name "enum class Role {")))
   (is (nil?           (core/extract-type-name "fn not_a_type() {}"))))
 
 ;; -------------------------------------------------------------------
@@ -79,12 +114,16 @@
 (deftest extract-type-kind-test
   (is (= :struct    (core/extract-type-kind "pub struct Query {")))
   (is (= :enum      (core/extract-type-kind "enum Strategy {")))
+  (is (= :enum      (core/extract-type-kind "enum class Role {")))
   (is (= :trait     (core/extract-type-kind "trait Executor {")))
   (is (= :interface (core/extract-type-kind "interface Renderable {")))
   (is (= :class     (core/extract-type-kind "class App {")))
   (is (= :type      (core/extract-type-kind "type Alias = String")))
   (is (= :protocol  (core/extract-type-kind "protocol Walkable")))
   (is (= :record    (core/extract-type-kind "record Point [x y]")))
+  (is (= :actor     (core/extract-type-kind "actor DataStore {")))
+  (is (= :object    (core/extract-type-kind "object Main {")))
+  (is (= :module    (core/extract-type-kind "module Auth")))
   (is (= :unknown   (core/extract-type-kind "fn something() {}"))))
 
 ;; -------------------------------------------------------------------
@@ -116,6 +155,12 @@
   (is (re-find core/source-exts "app.tsx"))
   (is (re-find core/source-exts "core.clj"))
   (is (re-find core/source-exts "main.py"))
+  (is (re-find core/source-exts "App.scala"))
+  (is (re-find core/source-exts "build.sc"))
+  (is (re-find core/source-exts "app.rb"))
+  (is (re-find core/source-exts "deploy.rake"))
+  (is (re-find core/source-exts "Main.kt"))
+  (is (re-find core/source-exts "build.gradle.kts"))
   (is (nil? (re-find core/source-exts "data.json")))
   (is (nil? (re-find core/source-exts "readme.md"))))
 
@@ -131,7 +176,11 @@
     (is (contains? langs :python))
     (is (contains? langs :go))
     (is (contains? langs :php))
-    (is (contains? langs :java))))
+    (is (contains? langs :java))
+    (is (contains? langs :swift))
+    (is (contains? langs :scala))
+    (is (contains? langs :ruby))
+    (is (contains? langs :kotlin))))
 
 (deftest register-lang-test
   (core/register-lang! :test-lang {:functions "test_fn" :types "test_type"})
