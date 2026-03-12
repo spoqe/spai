@@ -15,9 +15,13 @@ cd spai && ./install.sh
 
 Installs `spai` and `spai-edit` to `~/.local/bin/`. Requires [babashka](https://babashka.org/) (`bb`). [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) is optional — falls back to grep.
 
-## Claude Code (MCP)
+## Two ways to connect: MCP or CLI
 
-spai works as a native MCP tool server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Add to your project's `.mcp.json`:
+spai supports both MCP (tool schemas) and plain CLI (shell commands). Both expose the same tools. The difference is how your agent discovers them.
+
+### MCP (eager loading)
+
+MCP dumps full tool schemas into the agent's context at session start — ~42k tokens for the full spai toolkit. Use this if your framework expects MCP or you want native tool integration.
 
 ```json
 {
@@ -37,7 +41,23 @@ Or register globally:
 claude mcp add --transport stdio spai -- bb ~/.local/share/spai/spai-mcp.bb
 ```
 
-This gives Claude direct access to `shape`, `blast`, `context`, `who`, `related`, `drift`, `narrative`, and `errors_rust` as native tools — no shell pipelines, no output parsing.
+### CLI (lazy loading) — recommended
+
+The CLI approach loads nothing upfront. The agent calls `spai help` when it needs the catalog (~1,200 tokens for 35+ tools), or `spai search "question"` to find the right command via natural language using a local model. 94% fewer tokens, same capabilities.
+
+```bash
+spai help                          # Compact tool catalog (~1.2k tokens)
+spai search "find class predicates" # NL search via local qwen (optional)
+spai shape src/                     # Just run the command
+```
+
+This is the [follow-your-nose](https://en.wikipedia.org/wiki/Follow-your-nose_(computing)) pattern from RDF/Linked Data: don't download the whole schema, follow links to what you need. The agent discovers tools on demand, not all at once.
+
+### Why this matters
+
+MCP's eager loading made sense when tool catalogs were small. At 35+ tools with rich schemas, the upfront cost is significant — tokens the agent pays whether or not it uses the tools. The CLI approach lets the agent keep its context window for thinking instead of caching tool descriptions it may never need.
+
+Both approaches are fully supported. Use whichever fits your setup.
 
 ## spai — Code Exploration
 
