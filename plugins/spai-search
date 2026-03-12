@@ -1,0 +1,186 @@
+#!/usr/bin/env bb
+;; spai plugin: search
+;;
+;; Natural language → spai command recommendation via local Ollama.
+;; "Which spai command do I need?" answered by a tiny local model.
+;;
+;; Usage:  spai search "find class predicates"
+;;         spai search "what changed recently"
+;;         spai search --model qwen2.5-coder:3b "who uses this file"
+
+{:doap/name        "search"
+ :doap/description "NL search over spai's tool catalog via local Ollama"
+ :dc/creator       "Claude + Lance"
+ :spai/args        "\"natural language query\" [--model name]"
+ :spai/returns     "EDN: matched command(s) with usage and rationale"
+ :spai/example     "spai search \"find what predicates a class has\""
+ :spai/tags        #{:meta :discovery :nl}}
+
+(require '[babashka.http-client :as http]
+         '[babashka.process :as p]
+         '[cheshire.core :as json]
+         '[clojure.edn :as edn]
+         '[clojure.string :as str]
+         '[clojure.pprint :as pp])
+
+(def ollama-url (or (System/getenv "OLLAMA_URL") "http://localhost:11434"))
+(def default-model "qwen2.5-coder:7b")
+
+;; ---------------------------------------------------------------------------
+;; Catalog: read from spai help
+;; ---------------------------------------------------------------------------
+
+(defn load-catalog
+  "Run `spai help` and parse the EDN tool catalog."
+  []
+  (let [{:keys [exit out]} (p/shell {:out :string :err :string :continue true}
+                                     "spai" "help")]
+    (when (zero? exit)
+      ;; spai help outputs a header line then EDN. Find the opening {
+      (let [edn-start (str/index-of out "{")]
+        (when edn-start
+          (edn/read-string (subs out edn-start)))))))
+
+(defn catalog->prompt-text
+  "Turn the tool catalog into a compact text block for the LLM."
+  [catalog]
+  (str/join "\n"
+    (for [[cmd-key info] (sort-by key catalog)
+          :when (not= cmd-key :search)]  ; don't recommend ourselves
+      (let [name (name cmd-key)
+            desc (or (:returns info) "")
+            args (or (:args info) "")
+            example (or (:example info) "")]
+        (str name
+             (when (seq args) (str " " args))
+             (when (seq desc) (str " — " desc))
+             (when (seq example) (str " (e.g. " example ")")))))))
+
+;; ---------------------------------------------------------------------------
+;; System prompt — deliberately minimal
+;; ---------------------------------------------------------------------------
+
+(defn build-system-prompt [catalog-text]
+  (str
+"You are a tool recommender for `spai`, a code exploration CLI for LLM agents.
+Given a natural language question, return the best matching spai command(s).
+
+Output ONLY a valid EDN vector of maps. No explanation, no markdown, no prose.
+
+Each map must have:
+  :command    — the spai command name (string)
+  :invocation — exact command line to run (string)
+  :why       — one sentence explaining the match (string)
+
+Return 1-3 matches, best first. If unsure, return your best guess.
+
+## Available commands
+
+" catalog-text "
+
+Output ONLY the EDN vector."))
+
+;; ---------------------------------------------------------------------------
+;; Ollama
+;; ---------------------------------------------------------------------------
+
+(defn ollama-chat [model system-prompt user-prompt]
+  (let [resp (http/post (str ollama-url "/api/chat")
+               {:headers {"Content-Type" "application/json"}
+                :body (json/generate-string
+                        {:model model
+                         :messages [{:role "system" :content system-prompt}
+                                    {:role "user" :content user-prompt}]
+                         :stream false
+                         :options {:temperature 0.1
+                                   :num_predict 256}})
+                :throw false
+                :timeout 30000})
+        body (json/parse-string (:body resp) true)]
+    {:content (get-in body [:message :content])
+     :model (:model body)
+     :prompt_tokens (get-in body [:prompt_eval_count])
+     :completion_tokens (get-in body [:eval_count])
+     :total_ms (some-> (get-in body [:total_duration]) (/ 1e6) long)
+     :tokens_per_sec (when-let [eval-count (get-in body [:eval_count])]
+                       (when-let [eval-dur (get-in body [:eval_duration])]
+                         (when (pos? eval-dur)
+                           (-> (/ (* eval-count 1e9) eval-dur) (Math/round) (/ 1.0)))))}))
+
+(defn extract-edn
+  "Extract EDN from LLM response, stripping markdown fencing."
+  [text]
+  (let [text (str/trim (or text ""))]
+    (cond
+      (str/starts-with? text "```")
+      (let [lines (str/split-lines text)
+            inner (drop 1 (butlast lines))]
+        (str/join "\n" inner))
+      :else text)))
+
+;; ---------------------------------------------------------------------------
+;; Main
+;; ---------------------------------------------------------------------------
+
+(let [args *command-line-args*
+      model (atom default-model)
+      query-args (atom [])]
+
+  ;; Parse args
+  (loop [args args]
+    (when (seq args)
+      (cond
+        (= (first args) "--model")
+        (do (reset! model (second args))
+            (recur (drop 2 args)))
+
+        (contains? #{"--help" "-h"} (first args))
+        (do
+          (println "Usage: spai search \"your question here\"")
+          (println "       spai search --model qwen2.5-coder:3b \"who uses this file\"")
+          (println)
+          (println "Searches spai's tool catalog using natural language via local Ollama.")
+          (println "Returns the best matching command(s) with invocation examples.")
+          (System/exit 0))
+
+        :else
+        (do (swap! query-args conj (first args))
+            (recur (rest args))))))
+
+  (when (empty? @query-args)
+    (println "Usage: spai search \"your question here\"")
+    (System/exit 1))
+
+  ;; Load tool catalog
+  (let [catalog (load-catalog)]
+    (when-not catalog
+      (binding [*out* *err*]
+        (println "Error: could not load spai tool catalog (is spai installed?)"))
+      (System/exit 1))
+
+    (let [catalog-text (catalog->prompt-text catalog)
+          user-query (str/join " " @query-args)
+          system-prompt (build-system-prompt catalog-text)]
+
+      ;; Query ollama
+      (binding [*out* *err*]
+        (print (str "Searching (" @model ")... "))
+        (flush))
+
+      (let [result (ollama-chat @model system-prompt user-query)
+            raw (extract-edn (:content result))]
+
+        (binding [*out* *err*]
+          (println (str "done. ("
+                        (:total_ms result) "ms, "
+                        (:prompt_tokens result) "→" (:completion_tokens result) " tokens, "
+                        (:tokens_per_sec result) " tok/s)")))
+
+        ;; Try to parse as EDN, fall back to raw
+        (let [parsed (try (edn/read-string raw) (catch Exception _ nil))]
+          (if (and parsed (or (vector? parsed) (seq? parsed)))
+            (pp/pprint parsed)
+            ;; Fallback: print raw and wrap in error
+            (pp/pprint {:error "Could not parse LLM response as EDN"
+                        :raw raw
+                        :query user-query})))))))
