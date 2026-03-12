@@ -43,7 +43,8 @@
 (defn check-deps []
   (println)
   (let [bb-ok  (= 0 (:exit (sh "which" "bb")))
-        rg-ok  (= 0 (:exit (sh "which" "rg")))]
+        rg-ok  (= 0 (:exit (sh "which" "rg")))
+        ollama-ok (= 0 (:exit (sh "which" "ollama")))]
     (if bb-ok
       (info (str "babashka " (str/trim (:out (sh "bb" "--version")))))
       (do (warn "babashka (bb) not found")
@@ -52,10 +53,69 @@
           (println)))
     (if rg-ok
       (info (str "ripgrep " (first (str/split-lines (:out (sh "rg" "--version"))))))
-      (do (warn "ripgrep (rg) not found — spai will use grep (slower)")
-          (println "  Install: brew install ripgrep")
-          (println)))
-    {:bb bb-ok :rg rg-ok}))
+      (let [os   (str/lower-case (System/getProperty "os.name"))
+            mac? (str/includes? os "mac")
+            win? (str/includes? os "windows")
+            brew? (= 0 (:exit (sh "which" "brew")))
+            apt?  (= 0 (:exit (sh "which" "apt-get")))
+            dnf?  (= 0 (:exit (sh "which" "dnf")))
+            opkg? (= 0 (:exit (sh "which" "opkg")))
+            install-cmd (cond
+                          (and mac? brew?) ["brew" "install" "ripgrep"]
+                          apt?             ["sudo" "apt-get" "install" "-y" "ripgrep"]
+                          dnf?             ["sudo" "dnf" "install" "-y" "ripgrep"]
+                          opkg?            ["opkg" "install" "ripgrep"]
+                          win?             nil
+                          :else            nil)]
+        (warn "ripgrep (rg) not found — spai will use grep (slower)")
+        (if install-cmd
+          (do (print (str "  Install now? (" (str/join " " install-cmd) ") [Y/n] "))
+              (flush)
+              (let [ans (str/trim (or (read-line) ""))]
+                (when (or (= "" ans) (= "y" (str/lower-case ans)))
+                  (info "Installing ripgrep...")
+                  (let [r (apply sh install-cmd)]
+                    (if (zero? (:exit r))
+                      (info "ripgrep installed.")
+                      (do (warn (str "Install failed — run manually: " (str/join " " install-cmd)))
+                          (println (:err r))))))))
+          (do (println (if win?
+                         "  Install: winget install BurntSushi.ripgrep.MSVC"
+                         "  Install: https://github.com/BurntSushi/ripgrep#installation"))
+              (println)))))
+    (if ollama-ok
+      (do (info (str "ollama " (str/trim (:out (sh "ollama" "--version")))))
+          (let [list-out (:out (sh "ollama" "list"))
+                has-model? (str/includes? list-out "qwen2.5-coder:7b")]
+            (when-not has-model?
+              (when (ask "Pull qwen2.5-coder:7b for spai search? (2.2GB) [optional]" :y)
+                (info "Pulling qwen2.5-coder:7b...")
+                (let [r (sh "ollama" "pull" "qwen2.5-coder:7b")]
+                  (if (zero? (:exit r))
+                    (info "qwen2.5-coder:7b pulled.")
+                    (do (warn "Pull failed — run manually: ollama pull qwen2.5-coder:7b")
+                        (println (:err r)))))))))
+      (let [os   (str/lower-case (System/getProperty "os.name"))
+            mac? (str/includes? os "mac")
+            brew? (= 0 (:exit (sh "which" "brew")))
+            install-cmd (cond
+                          (and mac? brew?) ["brew" "install" "ollama"]
+                          :else            nil)]
+        (warn "ollama not found — spai search will not be available [optional]")
+        (if install-cmd
+          (do (print (str "  Install now? (" (str/join " " install-cmd) ") [Y/n] "))
+              (flush)
+              (let [ans (str/trim (or (read-line) ""))]
+                (when (or (= "" ans) (= "y" (str/lower-case ans)))
+                  (info "Installing ollama...")
+                  (let [r (apply sh install-cmd)]
+                    (if (zero? (:exit r))
+                      (info "ollama installed.")
+                      (do (warn (str "Install failed — run manually: " (str/join " " install-cmd)))
+                          (println (:err r))))))))
+          (do (println "  Install: https://ollama.ai/download")
+              (println)))))
+    {:bb bb-ok :rg rg-ok :ollama ollama-ok}))
 
 ;; --- PATH ---
 
@@ -176,6 +236,57 @@
           (println (str "  spai setup --claude-hooks"))
           (println (str "  Or manually: cp " hook-src " " hook-dst))))))
 
+;; --- MCP server ---
+
+(def mcp-script (str share-dir "/spai-mcp.bb"))
+
+(defn find-bb []
+  (let [candidates [(str home "/.local/bin/bb") "/usr/local/bin/bb" "/opt/homebrew/bin/bb"]
+        on-path    (let [r (sh "which" "bb")] (when (zero? (:exit r)) (str/trim (:out r))))]
+    (or on-path
+        (first (filter #(.exists (io/file %)) candidates)))))
+
+(defn has-spai-mcp? [settings]
+  (some? (get-in settings [:mcpServers :spai])))
+
+(defn install-mcp []
+  (let [bb (find-bb)]
+    (if-not bb
+      (do (warn "bb not found — cannot register MCP server")
+          (println "  Install babashka first, then re-run: spai setup"))
+      (let [settings (if (.exists (io/file settings-file))
+                       (json/parse-string (slurp settings-file) true)
+                       {})]
+        (if (has-spai-mcp? settings)
+          (info "spai MCP server already registered")
+          (let [updated (assoc-in settings [:mcpServers :spai]
+                                  {:command bb :args [mcp-script]})]
+            (spit settings-file (json/generate-string updated {:pretty true}))
+            (info "spai MCP server registered (restart Claude Code to activate)")))))))
+
+(defn setup-mcp [flags]
+  (when (.isDirectory (io/file claude-dir))
+    (when-not (.exists (io/file mcp-script))
+      (warn (str "spai-mcp.bb not found at " mcp-script " — skipping MCP setup"))
+      (System/exit 0))
+    (cond
+      (contains? flags "--mcp")
+      (install-mcp)
+
+      interactive?
+      (do (println)
+          (info "spai MCP server available!")
+          (println "  Exposes spai tools (memory, shape, blast, etc.) natively in Claude Code.")
+          (println "  Claude sees them as first-class tools, not shell commands.")
+          (println)
+          (when (ask "Register spai MCP server?" :y)
+            (install-mcp)))
+
+      :else
+      (do (println)
+          (info "To register spai as an MCP server:")
+          (println "  spai setup --mcp")))))
+
 ;; --- Main ---
 
 (defn -main [& args]
@@ -183,6 +294,7 @@
     (check-deps)
     (ensure-path)
     (setup-claude-hook flags)
+    (setup-mcp flags)
     (println)
     (info "Setup complete!")
     (println "  spai help")
