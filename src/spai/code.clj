@@ -83,11 +83,13 @@
   [symbol path]
   (let [path    (or path ".")
         type-args (if @core/has-rg?
-                    ["-g" "*.{rs,clj,cljs,ts,tsx,py,go,php,java,swift,edn,toml,md}"]
-                    ["--include=*.rs" "--include=*.clj" "--include=*.ts"
-                     "--include=*.tsx" "--include=*.py" "--include=*.go"
-                     "--include=*.php" "--include=*.java" "--include=*.swift"
-                     "--include=*.edn" "--include=*.toml"
+                    ["-g" "*.{rs,clj,cljs,ts,tsx,py,go,php,java,swift,scala,sc,rb,rake,kt,kts,edn,toml,md}"]
+                    ["--include=*.rs" "--include=*.clj" "--include=*.cljs"
+                     "--include=*.ts" "--include=*.tsx" "--include=*.py"
+                     "--include=*.go" "--include=*.php" "--include=*.java"
+                     "--include=*.swift" "--include=*.scala" "--include=*.sc"
+                     "--include=*.rb" "--include=*.rake" "--include=*.kt"
+                     "--include=*.kts" "--include=*.edn" "--include=*.toml"
                      "--include=*.md"])
         matches (or (apply core/grepf symbol path "-w" type-args)
                     [])]
@@ -128,7 +130,10 @@
    :go         #"^(func|type|var|const)\s+"
    :php        #"^\s*(public|protected|private)?\s*(static\s+)?(function|class|interface|trait|enum|abstract\s+class|final\s+class)\s+"
    :java       #"^\s*(public|protected|private)?\s*(static\s+)?(abstract\s+)?(class|interface|enum|record|@interface|void|int|long|boolean|String|[A-Z]\w+)\s+"
-   :swift      #"^\s*(@\w+(\([^)]*\))?\s+)*(open\s+|public\s+|internal\s+|fileprivate\s+|private\s+)?(static\s+|class\s+|override\s+|mutating\s+)?(func|struct|class|enum|protocol|actor|extension|typealias|let|var)\s+"})
+   :swift      #"^\s*(@\w+(\([^)]*\))?\s+)*(open\s+|public\s+|internal\s+|fileprivate\s+|private\s+)?(static\s+|class\s+|override\s+|mutating\s+)?(func|struct|class|enum|protocol|actor|extension|typealias|let|var)\s+"
+   :scala      #"^\s*(override\s+)?(private(\[\w+\])?\s+|protected(\[\w+\])?\s+)?(lazy\s+)?(sealed\s+|abstract\s+|final\s+)?(case\s+)?(def|val|var|class|object|trait|enum)\s+"
+   :ruby       #"^\s*(def\s+self\.\w+|def\s+\w+|class\s+\w+|module\s+\w+)"
+   :kotlin     #"^\s*(override\s+)?(public\s+|private\s+|protected\s+|internal\s+)?(sealed\s+|abstract\s+|open\s+|inner\s+|data\s+|value\s+|enum\s+)*(fun|val|var|class|interface|object)\s+"})
 
 (defn definition
   "Find where a symbol is defined. Filters usages to definition-site patterns."
@@ -176,7 +181,11 @@
    :php        {:pattern "^\\s*(use|require|require_once|include|include_once)\\s+"
                 :extract #"(?:use|require|require_once|include|include_once)\s+(\S+)"}
    :java       {:pattern "^import\\s+" :extract #"import\s+(?:static\s+)?([^;]+)"}
-   :swift      {:pattern "^(@testable\\s+)?import\\s+" :extract #"import\s+(\w+)"}})
+   :swift      {:pattern "^(@testable\\s+)?import\\s+" :extract #"import\s+(\w+)"}
+   :scala      {:pattern "^import\\s+" :extract #"import\s+(\S+)"}
+   :ruby       {:pattern "^\\s*(require|require_relative|include|extend|prepend)\\s+"
+                :extract #"(?:require|require_relative)\s+['\"]([^'\"]+)['\"]"}
+   :kotlin     {:pattern "^import\\s+" :extract #"import\s+(\S+)"}})
 
 (defn who
   "Reverse file dependencies. Who imports/uses this file?
@@ -315,6 +324,38 @@
                     :line   (:line h)
                     :kind   (if (re-find #"^import\s+static\s+" (:text h)) :static-import :import)}))))))
 
+(defmethod extract-imports :kotlin [_ file-path]
+  (let [hits (or (core/grepf "^import\\s+" file-path) [])]
+    (->> hits
+         (keep (fn [h]
+                 (when-let [[_ path] (re-find #"import\s+(\S+)" (:text h))]
+                   {:module (str/trim path)
+                    :line   (:line h)
+                    :kind   :import}))))))
+
+(defmethod extract-imports :ruby [_ file-path]
+  (let [hits (or (core/grepf "^\\s*(require|require_relative)\\s+" file-path) [])]
+    (->> hits
+         (keep (fn [h]
+                 (let [text (:text h)]
+                   (cond
+                     (re-find #"require_relative" text)
+                     (when-let [[_ path] (re-find #"require_relative\s+['\"]([^'\"]+)['\"]" text)]
+                       {:module path :line (:line h) :kind :require_relative})
+
+                     (re-find #"require\s" text)
+                     (when-let [[_ path] (re-find #"require\s+['\"]([^'\"]+)['\"]" text)]
+                       {:module path :line (:line h) :kind :require}))))))))
+
+(defmethod extract-imports :scala [_ file-path]
+  (let [hits (or (core/grepf "^import\\s+" file-path) [])]
+    (->> hits
+         (keep (fn [h]
+                 (when-let [[_ path] (re-find #"import\s+(\S+)" (:text h))]
+                   {:module (str/trim path)
+                    :line   (:line h)
+                    :kind   :import}))))))
+
 (defmethod extract-imports :swift [_ file-path]
   (let [hits (or (core/grepf "^(@testable\\s+)?import\\s+" file-path) [])]
     (->> hits
@@ -376,6 +417,37 @@
       (if (or (.exists (io/file dir "pom.xml"))
               (.exists (io/file dir "build.gradle"))
               (.exists (io/file dir "build.gradle.kts")))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defmethod find-project-root :kotlin [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (or (.exists (io/file dir "build.gradle.kts"))
+              (.exists (io/file dir "build.gradle"))
+              (.exists (io/file dir "pom.xml")))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defmethod find-project-root :ruby [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (or (.exists (io/file dir "Gemfile"))
+              (.exists (io/file dir "config.ru"))
+              (and (.exists (io/file dir "lib"))
+                   (.exists (io/file dir "Rakefile"))))
+        (.getCanonicalPath dir)
+        (recur (.getParentFile dir))))))
+
+(defmethod find-project-root :scala [_ start-path]
+  (loop [dir (let [f (io/file start-path)]
+               (if (.isFile f) (.getParentFile f) f))]
+    (when dir
+      (if (or (.exists (io/file dir "build.sbt"))
+              (.exists (io/file dir "build.sc"))
+              (.exists (io/file dir "pom.xml")))
         (.getCanonicalPath dir)
         (recur (.getParentFile dir))))))
 
@@ -507,6 +579,63 @@
           ;; Android layout
           (try-file (str project-root "/app/src/main/java"))))))
 
+(defmethod resolve-module :kotlin [_ mod-str _current-file project-root]
+  (let [as-path (str (str/replace mod-str "." "/") ".kt")
+        try-file (fn [base]
+                   (when base
+                     (let [f (io/file (str base "/" as-path))]
+                       (when (.exists f) (.getCanonicalPath f)))))]
+    (when project-root
+      (or (try-file (str project-root "/src/main/kotlin"))
+          (try-file (str project-root "/src/main/java"))
+          (try-file (str project-root "/src"))
+          (try-file project-root)
+          ;; Android
+          (try-file (str project-root "/app/src/main/kotlin"))
+          (try-file (str project-root "/app/src/main/java"))))))
+
+(defmethod resolve-module :ruby [_ mod-str current-file project-root]
+  (let [cur-dir  (.getParent (io/file current-file))
+        ;; require_relative is always relative to current file
+        ;; require is from load path (lib/, app/, project root)
+        try-file (fn [base path]
+                   (when base
+                     (let [f (io/file (str base "/" path ".rb"))]
+                       (when (.exists f) (.getCanonicalPath f)))))]
+    (cond
+      ;; require_relative: resolve from current file's directory
+      (or (str/starts-with? mod-str "./")
+          (str/starts-with? mod-str "../")
+          ;; bare name from require_relative also resolves relative
+          (not (str/includes? mod-str "/")))
+      (or (try-file cur-dir mod-str)
+          (when project-root (try-file (str project-root "/lib") mod-str)))
+
+      :else
+      (when project-root
+        (or (try-file (str project-root "/lib") mod-str)
+            (try-file (str project-root "/app") mod-str)
+            (try-file (str project-root "/app/models") mod-str)
+            (try-file project-root mod-str))))))
+
+(defmethod resolve-module :scala [_ mod-str _current-file project-root]
+  (let [;; com.foo.bar.Baz → com/foo/bar/Baz.scala (or package object)
+        ;; Strip trailing ._ or .{...} (wildcard/selective imports)
+        clean   (-> mod-str
+                    (str/replace #"\.\{[^}]*\}$" "")
+                    (str/replace #"\._$" ""))
+        as-path (str (str/replace clean "." "/") ".scala")
+        try-file (fn [base]
+                   (when base
+                     (let [f (io/file (str base "/" as-path))]
+                       (when (.exists f) (.getCanonicalPath f)))))]
+    (when project-root
+      (or (try-file (str project-root "/src/main/scala"))
+          (try-file (str project-root "/src"))
+          (try-file project-root)
+          ;; Mill layout
+          (try-file (str project-root "/src"))))))
+
 (defmethod resolve-module :default [_ _ _ _] nil)
 
 ;; ---
@@ -533,6 +662,19 @@
                         (str/starts-with? mod-str "org.ietf."))
                   :external :probe)
     :swift      :external  ;; Swift imports are always module-level (no relative imports)
+    :scala      (if (or (str/starts-with? mod-str "java.")
+                        (str/starts-with? mod-str "javax.")
+                        (str/starts-with? mod-str "scala."))
+                  :external :probe)
+    :ruby       (if (or (str/starts-with? mod-str "./")
+                        (str/starts-with? mod-str "../"))
+                  :local :probe)
+    :kotlin     (if (or (str/starts-with? mod-str "java.")
+                        (str/starts-with? mod-str "javax.")
+                        (str/starts-with? mod-str "kotlin.")
+                        (str/starts-with? mod-str "kotlinx.")
+                        (str/starts-with? mod-str "android."))
+                  :external :probe)
     :clojure    :unknown
     :go         :unknown
     :unknown))

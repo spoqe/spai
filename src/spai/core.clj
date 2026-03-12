@@ -113,7 +113,23 @@
     {:functions "^\\s*(@\\w+(\\([^)]*\\))?\\s+)*(open\\s+|public\\s+|internal\\s+|fileprivate\\s+|private\\s+)?(static\\s+|class\\s+|override\\s+|mutating\\s+|nonisolated\\s+)*func\\s+\\w+"
      :types     "^\\s*(open\\s+|public\\s+|internal\\s+|fileprivate\\s+|private\\s+)?(final\\s+)?(struct|class|enum|protocol|actor)\\s+\\w+"
      :impls     "^\\s*(open\\s+|public\\s+|internal\\s+|fileprivate\\s+|private\\s+)?extension\\s+\\w+"
-     :imports   "^(@testable\\s+)?import\\s+"}}))
+     :imports   "^(@testable\\s+)?import\\s+"}
+
+    :scala
+    {:functions "^\\s*(override\\s+)?(private(\\[\\w+\\])?\\s+|protected(\\[\\w+\\])?\\s+)?(lazy\\s+)?(def|val|var)\\s+\\w+"
+     :types     "^\\s*(sealed\\s+|abstract\\s+|final\\s+)?(case\\s+)?(class|object|trait|enum)\\s+\\w+"
+     :imports   "^import\\s+"}
+
+    :ruby
+    {:functions "^\\s*(def\\s+self\\.\\w+|def\\s+\\w+)"
+     :types     "^\\s*(class|module)\\s+\\w+"
+     :imports   "^\\s*(require|require_relative|include|extend|prepend)\\s+"}
+
+    :kotlin
+    {:functions "^\\s*(override\\s+)?(public\\s+|private\\s+|protected\\s+|internal\\s+)?(inline\\s+|suspend\\s+|tailrec\\s+)*(fun\\s+\\w+|val\\s+\\w+|var\\s+\\w+)"
+     :types     "^\\s*(public\\s+|private\\s+|protected\\s+|internal\\s+)?(sealed\\s+|abstract\\s+|open\\s+|inner\\s+|data\\s+|value\\s+|enum\\s+)*(class|interface|object)\\s+\\w+"
+     :imports   "^import\\s+"}}))
+
 
 (defn register-lang!
   "Register grep patterns for a new language. Extends spai to support any language.
@@ -139,6 +155,11 @@
           (str/ends-with? name ".php")                          :php
           (str/ends-with? name ".java")                         :java
           (str/ends-with? name ".swift")                        :swift
+          (or (str/ends-with? name ".scala")
+              (str/ends-with? name ".sc"))                      :scala
+          (str/ends-with? name ".rb")                           :ruby
+          (or (str/ends-with? name ".kt")
+              (str/ends-with? name ".kts"))                     :kotlin
           :else                                                 :unknown))
       ;; Directory - sample first 100 files
       (let [files (->> (file-seq f)
@@ -156,6 +177,11 @@
           (some #(str/ends-with? % ".php") files)              :php
           (some #(str/ends-with? % ".java") files)             :java
           (some #(str/ends-with? % ".swift") files)            :swift
+          (some #(or (str/ends-with? % ".scala")
+                     (str/ends-with? % ".sc")) files)          :scala
+          (some #(str/ends-with? % ".rb") files)               :ruby
+          (some #(or (str/ends-with? % ".kt")
+                     (str/ends-with? % ".kts")) files)         :kotlin
           :else                                                 :unknown)))))
 
 (def ^:private core-clj-path
@@ -192,15 +218,21 @@
     :php        (second (re-find #"function\s+(\w+)" text))
     :java       (second (re-find #"(\w+)\s*\(" text))
     :swift      (second (re-find #"func\s+(\w+)" text))
+    :scala      (second (re-find #"(?:def|val|var)\s+(\w+)" text))
+    :ruby       (or (second (re-find #"def\s+self\.(\w+)" text))
+                    (second (re-find #"def\s+(\w+)" text)))
+    :kotlin     (or (second (re-find #"fun\s+(\w+)" text))
+                    (second (re-find #"(?:val|var)\s+(\w+)" text)))
     nil))
 
 (defn extract-type-name [text]
-  (second (re-find #"(?:struct|enum|trait|class|interface|type|protocol|record)\s+(\w+)" text)))
+  (second (re-find #"(?:enum\s+class|struct|enum|trait|class|interface|type|protocol|record|object|module)\s+(\w+)" text)))
 
 (defn extract-type-kind [text]
   (cond
-    (re-find #"\bstruct\b" text)    :struct
-    (re-find #"\benum\b" text)      :enum
+    (re-find #"\bstruct\b" text)      :struct
+    (re-find #"\benum\s+class\b" text) :enum
+    (re-find #"\benum\b" text)        :enum
     (re-find #"\btrait\b" text)     :trait
     (re-find #"\binterface\b" text) :interface
     (re-find #"\bclass\b" text)     :class
@@ -208,6 +240,8 @@
     (re-find #"\bprotocol\b" text)  :protocol
     (re-find #"\brecord\b" text)    :record
     (re-find #"\bactor\b" text)    :actor
+    (re-find #"\bobject\b" text)  :object
+    (re-find #"\bmodule\b" text) :module
     :else                           :unknown))
 
 (defn relativize
@@ -225,4 +259,4 @@
 
 (def source-exts
   "Source file extensions we care about."
-  #"\.(rs|ts|tsx|js|jsx|py|go|clj|cljs|java|rb|php|swift)$")
+  #"\.(rs|ts|tsx|js|jsx|py|go|clj|cljs|java|rb|php|swift|scala|sc|rake|kt|kts)$")

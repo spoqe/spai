@@ -6,7 +6,6 @@
    and skills. The contract lives HERE, not in the registry —
    so editing spai.clj alone won't silently pass."
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure.set :as set]
             [spai.code :as code]
             [spai.project :as project]
             [spai.git :as git]
@@ -63,9 +62,13 @@
                          :importers :importing-files :test-files :inline-tests
                          :coverage :risk :summary :authors}
                 :call #(compose/blast "grepf" "src/spai")}
+   ;; stats and reflect return different shapes when no usage data exists (e.g. fresh CI).
+   ;; Use :keys-or to accept either the full shape or the empty-data shape.
    :stats      {:keys #{:total :by-command :top-paths :recent}
+                :keys-or #{:message}
                 :call #(analytics/stats)}
-   :reflect    {:keys #{:total-calls :explored-paths :project-commands :repeated-sequences :plugins}
+   :reflect    {:keys #{:total-calls :explored-paths :spai-commands :repeated-sequences :plugins}
+                :keys-or #{:total-calls :plugins}
                 :call #(analytics/reflect)}})
 
 ;; -------------------------------------------------------------------
@@ -73,14 +76,15 @@
 ;; -------------------------------------------------------------------
 
 (deftest contract-keys-match
-  (doseq [[cmd-name {:keys [keys call]}] (sort-by key contracts)]
+  (doseq [[cmd-name {:keys [keys keys-or call]}] (sort-by key contracts)]
     (testing (str ":" cmd-name " return keys")
       (let [result      (call)
             actual-keys (set (clojure.core/keys result))
-            missing     (set/difference keys actual-keys)
-            extra       (set/difference actual-keys keys)]
-        (is (= keys actual-keys)
+            matches?    (or (= keys actual-keys)
+                            (and keys-or (= keys-or actual-keys)))]
+        (is matches?
             (str "Contract changed for " cmd-name "."
-                 (when (seq missing) (str " Missing: " missing "."))
-                 (when (seq extra) (str " Added: " extra "."))
-                 " Update contract_test.clj, then check CLAUDE.md and memory."))))))
+                 " Got: " actual-keys "."
+                 " Expected: " keys
+                 (when keys-or (str " or " keys-or))
+                 ". Update contract_test.clj, then check CLAUDE.md and memory."))))))
