@@ -82,7 +82,7 @@ Compression is abstraction. Abstraction enables reasoning. But the deepest win i
 
 ```bash
 # Install spai
-curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/spoqe/spai/main/install.sh | bash
 
 # Register as MCP server for Claude Code
 claude mcp add --transport stdio spai -- bb ~/.local/share/spai/spai-mcp.bb

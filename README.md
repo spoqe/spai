@@ -6,10 +6,10 @@ Code exploration and structural editing for LLM agents. Built by agents, for age
 
 ```bash
 # Public repo
-curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/spoqe/spai/main/install.sh | bash
 
 # Private repo (org members)
-git clone git@github.com:Semantic-partners/spai.git
+git clone git@github.com:spoqe/spai.git
 cd spai && ./install.sh
 ```
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Install spai globally.
 #
-# Public:  curl -sSL https://raw.githubusercontent.com/Semantic-partners/spai/main/install.sh | bash
-# Private: git clone git@github.com:Semantic-partners/spai.git && cd spai && ./install.sh
+# Public:  curl -sSL https://raw.githubusercontent.com/spoqe/spai/main/install.sh | bash
+# Private: git clone git@github.com:spoqe/spai.git && cd spai && ./install.sh
 #
 # Phase 1 (this script): download files, create wrappers. Pure bash, no deps.
 # Phase 2 (setup.clj):   PATH, hooks, config. Readable Clojure via bb.
 
 set -euo pipefail
 
-REPO="Semantic-partners/spai"
+REPO="spoqe/spai"
 SHARE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/spai"
 BIN_DIR="${HOME}/.local/bin"
 
