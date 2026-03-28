@@ -269,7 +269,7 @@
   "Download and install the latest version."
   []
   (let [version   (read-version)
-        repo      (or (:repo version) "Semantic-partners/spai")
+        repo      (or (:repo version) "spoqe/spai")
         tmp       (str (System/getProperty "java.io.tmpdir") "/spai-update-" (System/currentTimeMillis))
         origin    (:origin version)
         clone-url (or (when (seq origin) origin)

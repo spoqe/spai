@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>spai: We Asked the Agent What It Needs</title>
+<script async src="https://js.stripe.com/v3/buy-button.js"></script>
 <style>
   :root {
     --bg: #0f1117;
@@ -886,8 +887,27 @@
 
   <!-- Hero -->
   <section class="hero">
+    <div style="margin-bottom: 1.5rem;">
+      <svg width="64" height="64" viewBox="0 0 240 240">
+        <line x1="148" y1="148" x2="205" y2="205" stroke="#8b8d97" stroke-width="18" stroke-linecap="round"/>
+        <line x1="148" y1="148" x2="205" y2="205" stroke="#6ee7b7" stroke-width="8" stroke-linecap="round" opacity="0.3"/>
+        <circle cx="100" cy="100" r="72" fill="#0f1117" fill-opacity="0.6"/>
+        <circle cx="100" cy="100" r="72" fill="none" stroke="#2a2d3a" stroke-width="8"/>
+        <circle cx="100" cy="100" r="72" fill="none" stroke="#6ee7b7" stroke-width="4" opacity="0.5"/>
+        <line x1="100" y1="100" x2="100" y2="38" stroke="#6ee7b7" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="100" y1="100" x2="144" y2="56" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="100" y1="100" x2="162" y2="100" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="100" y1="100" x2="144" y2="144" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="100" y1="100" x2="100" y2="162" stroke="#6ee7b7" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="100" y1="100" x2="56" y2="144" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="100" y1="100" x2="38" y2="100" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <line x1="100" y1="100" x2="56" y2="56" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+        <circle cx="100" cy="100" r="6" fill="#6ee7b7" opacity="0.9"/>
+      </svg>
+    </div>
     <h1>We asked the agent <span>what it needs.</span></h1>
-    <p>Everyone builds AI-powered tools. Almost nobody asks the AI what tools it wants. <span class="mono">spai</span> was designed by its user.</p>
+    <p>Your AI agents burn 180k tokens reading code they already read yesterday. <span class="mono">spai</span> gives them structured answers in 500. <strong style="color:var(--text)">99.7% less spend.</strong></p>
+    <p style="margin-top: 0.75rem;">Everyone builds AI-powered tools. Almost nobody asks the AI what tools it wants. <span class="mono">spai</span> was designed by its user.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════ -->
@@ -1319,8 +1339,16 @@
       <h2>Get <span>started.</span></h2>
     </div>
     <div class="cta-links">
-      <a href="https://github.com/Semantic-partners/spai" class="primary">GitHub</a>
+      <a href="https://github.com/spoqe/spai" class="primary">GitHub</a>
+      <a href="https://spoqe.dev">Part of the SPOQE ecosystem</a>
       <a href="mailto:spai@semanticpartners.com">spai@semanticpartners.com</a>
+    </div>
+    <div style="margin-top: 1.5rem; text-align: center;">
+      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem;">Buy us a coffee (or our Claude, some tokens)</p>
+      <stripe-buy-button
+        buy-button-id="buy_btn_1TFzhhJyeHJBvN8SsdNAxpTv"
+        publishable-key="pk_test_51TFpwAJyeHJBvN8S8XwqDfezb4XSomVqe8oW9n8N9Hf5FTYtkRzTjd6BLjkfk5Kvdtk5mHsGUmtnokzbvbLrkbm300mRr7QE8E"
+      ></stripe-buy-button>
     </div>
   </section>
 
@@ -1377,7 +1405,7 @@
     // Pass 1: Full speed with thinking pauses.
     // Each pass eats ~18% context — it's the repetition that kills you.
     const pass1Context = [4, 7, 11, 15, 18];
-    const thinkDuration = [1800, 2000, 2400, 2200, 3000];
+    const thinkDuration = [1350, 1500, 1800, 1650, 2250];
 
     await sleep(400);
 
