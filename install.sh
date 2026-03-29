@@ -77,6 +77,13 @@ info "Creating wrappers in $BIN_DIR..."
 
 cat > "$BIN_DIR/spai" << 'WRAPPER'
 #!/usr/bin/env bash
+# Check for babashka
+if ! command -v bb &>/dev/null; then
+  echo "spai needs babashka (bb) to run." >&2
+  echo "Install it: https://babashka.org" >&2
+  echo "Then try again." >&2
+  exit 1
+fi
 # Global plugins
 export PATH="SHARE_DIR_PLACEHOLDER/plugins:$PATH"
 # Project-local plugins: walk up from CWD
@@ -93,6 +100,11 @@ chmod +x "$BIN_DIR/spai"
 
 cat > "$BIN_DIR/spai-edit" << EOF
 #!/usr/bin/env bash
+if ! command -v bb &>/dev/null; then
+  echo "spai-edit needs babashka (bb) to run." >&2
+  echo "Install it: https://babashka.org" >&2
+  exit 1
+fi
 bb "$SHARE_DIR/spai-edit.clj" "\$@"
 EOF
 chmod +x "$BIN_DIR/spai-edit"
