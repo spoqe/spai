@@ -8,7 +8,7 @@
 <meta name="color-scheme" content="dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0f1117;
@@ -27,7 +27,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.6;
@@ -73,7 +73,8 @@
   nav .links a {
     color: var(--muted);
     text-decoration: none;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    font-weight: 500;
     transition: color 0.2s;
   }
   nav .links a:hover { color: var(--text); }
@@ -153,10 +154,11 @@
   }
   section:last-of-type { border-bottom: none; }
   .section-label {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    color: var(--faint);
+    color: var(--muted);
     margin-bottom: 0.75rem;
   }
   .section-title {
@@ -189,6 +191,10 @@
     border-radius: 12px;
     overflow: hidden;
   }
+  .comp-panel.winner {
+    border-color: var(--accent);
+    box-shadow: 0 0 24px rgba(110, 231, 183, 0.08);
+  }
   .comp-panel-header {
     padding: 0.75rem 1.25rem;
     border-bottom: 1px solid var(--border);
@@ -204,12 +210,12 @@
   .comp-body {
     padding: 1.25rem;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     line-height: 1.85;
     min-height: 240px;
   }
   .comp-body .cmd { color: var(--accent); }
-  .comp-body .thinking { color: var(--faint); font-style: italic; }
+  .comp-body .thinking { color: var(--muted); font-style: italic; }
   .comp-body .result { color: var(--accent); margin-top: 0.75rem; }
   .comp-stat {
     padding: 0.75rem 1.25rem;
@@ -329,7 +335,7 @@
   <a class="logo" href="/">SP<svg class="nav-wheel" viewBox="0 0 120 120"><circle class="rim" cx="60" cy="60" r="52"/><circle class="rim-accent" cx="60" cy="60" r="52"/><line class="spoke-line" x1="60" y1="60" x2="60" y2="10" style="stroke:var(--accent)"/><line class="spoke-line" x1="60" y1="60" x2="95" y2="25" style="stroke:var(--accent2)"/><line class="spoke-line" x1="60" y1="60" x2="110" y2="60" style="stroke:var(--accent3)"/><line class="spoke-line" x1="60" y1="60" x2="95" y2="95" style="stroke:var(--accent2)"/><line class="spoke-line" x1="60" y1="60" x2="60" y2="110" style="stroke:var(--accent)"/><line class="spoke-line" x1="60" y1="60" x2="25" y2="95" style="stroke:var(--accent2)"/><line class="spoke-line" x1="60" y1="60" x2="10" y2="60" style="stroke:var(--accent3)"/><line class="spoke-line" x1="60" y1="60" x2="25" y2="25" style="stroke:var(--accent2)"/><circle class="hub" cx="60" cy="60" r="5"/></svg>QE</a>
   <div class="links">
     <a href="https://github.com/spoqe/spai">GitHub</a>
-    <a href="mailto:hello@semanticpartners.com">Contact</a>
+    <a href="mailto:hello@spoqe.dev">Contact</a>
   </div>
 </nav>
 
@@ -362,7 +368,7 @@
         <!-- Glint -->
         <ellipse cx="52" cy="52" rx="13" ry="7" transform="rotate(-40,52,52)" fill="white" opacity="0.07"/>
         <!-- Wordmark -->
-        <text x="170" y="92" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="64" font-weight="700" letter-spacing="-0.03em" fill="#e4e4e7">
+        <text x="170" y="92" font-family="Plus Jakarta Sans, -apple-system, BlinkMacSystemFont, sans-serif" font-size="64" font-weight="700" letter-spacing="-0.03em" fill="#e4e4e7">
           <tspan fill="#6ee7b7">sp</tspan><tspan fill="#e4e4e7">ai</tspan>
         </text>
       </svg>
@@ -417,7 +423,7 @@
         </div>
       </div>
 
-      <div class="comp-panel">
+      <div class="comp-panel winner">
         <div class="comp-panel-header">
           <span class="label-good">With spai</span>
           <span class="count">1 round-trip</span>
@@ -477,7 +483,7 @@
   <section>
     <p class="section-label">The token maths</p>
     <h2 class="section-title">MCP costs you <span style="color:var(--danger)">42k tokens</span> before your agent thinks a single thought.</h2>
-    <p class="section-desc">spai loads 1.2k. The other 40,800 go back to thinking.</p>
+    <p class="section-desc"><strong style="color: var(--accent);">spai</strong> loads 1.2k. The other 40,800 go back to thinking.</p>
 
     <div class="mcp-grid">
       <div class="mcp-card">
@@ -515,6 +521,57 @@
     <p style="color: var(--muted); font-size: 0.88rem;"><a href="https://github.com/spoqe/spai-vscode" style="color: var(--accent); text-decoration: none;">VS Code extension on GitHub</a> — or keep using the CLI. Same tools either way.</p>
   </section>
 
+  <!-- ── SPOQE teaser ── -->
+  <section>
+    <p class="section-label">What's next</p>
+    <h2 class="section-title"><span class="green">spai</span> is the first tool from SPOQE.</h2>
+    <p class="section-desc" style="max-width: 600px;">We're building a federated query engine &mdash; one language across SQL, SPARQL, Elasticsearch, and REST APIs. Your data stays where it is. No ETL. No data movement. spai's agent memory will be built on it.</p>
+    <p class="section-desc" style="max-width: 600px;"><strong style="color: var(--text);">spai is free, today.</strong> SPOQE is coming. Leave your email &mdash; we'll let you know when it's live. One email. No spam.</p>
+
+    <form id="signup-form" style="display: flex; gap: 0.75rem; max-width: 420px; margin-top: 1.5rem;">
+      <input type="email" id="signup-email" placeholder="you@example.com" required
+        style="flex: 1; padding: 0.65rem 1rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: 0.9rem; outline: none; transition: border-color 0.2s;"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+      <button type="submit"
+        style="padding: 0.65rem 1.5rem; background: var(--accent); color: var(--bg); border: none; border-radius: 6px; font-family: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap;"
+        onmouseover="this.style.background='#5dd9a8'" onmouseout="this.style.background='var(--accent)'">Notify me</button>
+    </form>
+    <p id="signup-msg" style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--faint); display: none;"></p>
+
+    <script>
+    document.getElementById('signup-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = this.querySelector('button');
+      const msg = document.getElementById('signup-msg');
+      const email = document.getElementById('signup-email').value.trim();
+      btn.disabled = true;
+      btn.textContent = '...';
+      msg.style.display = 'none';
+      try {
+        const res = await fetch('https://signup.spoqe.dev', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (res.ok) {
+          msg.style.color = 'var(--accent)';
+          msg.textContent = "You're in. We'll email when SPOQE is live.";
+          btn.textContent = 'Done';
+          document.getElementById('signup-email').value = '';
+        } else {
+          throw new Error();
+        }
+      } catch {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Something went wrong. Try hello@spoqe.dev instead.';
+        btn.textContent = 'Notify me';
+        btn.disabled = false;
+      }
+      msg.style.display = 'block';
+    });
+    </script>
+  </section>
+
   <!-- ── FAQ ── -->
   <section>
     <h2 class="section-title">FAQ</h2>
@@ -541,7 +598,7 @@
 
     <div class="faq-item">
       <p class="faq-q">Who built this?</p>
-      <p class="faq-a"><a href="https://semanticpartners.com">Semantic Partners</a>. The story's above &mdash; we use spai on most branches now. The agent reaches for it. <a href="mailto:hello@semanticpartners.com">Let us know what tools your agent wants.</a></p>
+      <p class="faq-a"><a href="https://semanticpartners.com">Semantic Partners</a>. The story's above &mdash; we use spai on most branches now. The agent reaches for it. <a href="mailto:hello@spoqe.dev">Let us know what tools your agent wants.</a></p>
     </div>
   </section>
 
