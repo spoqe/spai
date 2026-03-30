@@ -395,7 +395,7 @@
   <section>
     <p class="section-label">Origin</p>
     <h2 class="section-title">We watched the agent <span class="green">work.</span></h2>
-    <p class="section-desc" style="max-width: 600px;">We're building SPOQE &mdash; a federated query engine, one language across SQL, SPARQL, Elasticsearch, GraphQL, and REST APIs. It's about 30,000 lines of Rust now, built with AI agents.</p>
+    <p class="section-desc" style="max-width: 600px;">We're building SPOQE &mdash; a federated query engine, one language across SQL, SPARQL, Elasticsearch, GraphQL, and REST APIs. It's about 100,000 lines of Rust now, built with AI agents.</p>
     <p class="section-desc" style="max-width: 600px;">The agent had proved our concept, but the architecture wasn't where we wanted it. So we began refactoring, applying tech debt skills. The agent was making progress &mdash; but as we watched it work, we noticed something.</p>
     <p class="section-desc" style="max-width: 600px; color: var(--text); font-weight: 500;">Not the output. The process.</p>
     <p class="section-desc" style="max-width: 600px;">It needed to understand one function &mdash; <code>execute_plan</code> &mdash; who calls it, what depends on it, what breaks if it changes. So it grepped five times, five round-trips, 180,000 tokens. And it did the same thing again next session, because it forgets.</p>
