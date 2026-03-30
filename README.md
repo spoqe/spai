@@ -8,6 +8,12 @@ Works with any agent that can run a shell command.
 
 **35 tools · CLI + MCP · Babashka · EPL licence · [spai.spoqe.dev](https://spai.spoqe.dev)**
 
+| Hotspots | Module Shape | Co-change |
+|----------|-------------|-----------|
+| ![Hotspots treemap](docs/hotspot-ss.png) | ![Module shape](docs/module-shape-ss.png) | ![Co-change analysis](docs/co-change-ss.png) |
+
+Also available as a [VS Code extension](https://github.com/spoqe/spai-vscode) — same tools, rendered inline.
+
 ## Install
 
 ```bash
