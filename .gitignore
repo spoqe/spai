@@ -12,3 +12,4 @@ plugins/spai-concept
 # Domain plugins (live in sp-sr-sq)
 plugins/spai-drug-map
 plugins/spai-organ-risk
+docs/index-original.html
