@@ -160,7 +160,7 @@
                              (filter #(re-find core/source-exts %))
                              vec))]
     (if (empty? changed-files)
-      {:path path :ref ref :changes [] :summary "No structural changes"}
+      {:path path :ref ref :files 0 :changes [] :summary "No structural changes"}
       (let [file-diffs
             (mapv
               (fn [file]
