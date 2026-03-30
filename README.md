@@ -1,6 +1,18 @@
 # spai
 
-Code exploration and structural editing for LLM agents. Built by agents, for agents. Two babashka scripts, structured EDN output, no frameworks.
+Structured code exploration for AI agents. One command instead of five greps. 545 tokens instead of 180,000.
+
+Your agent wakes up every session in a codebase it's never seen. No memory, no orientation, no map. spai gives it the map — module structure, blast radius, co-change analysis, reverse deps — so it can get up to speed in seconds, not minutes. Without a full memory system. Without burning your context window on exploration.
+
+Works with any agent that can run a shell command.
+
+**35 tools · CLI + MCP · Babashka · EPL licence · [spai.spoqe.dev](https://spai.spoqe.dev)**
+
+| Hotspots | Module Shape | Co-change |
+|----------|-------------|-----------|
+| ![Hotspots treemap](docs/hotspot-ss.png) | ![Module shape](docs/module-shape-ss.png) | ![Co-change analysis](docs/co-change-ss.png) |
+
+Also available as a [VS Code extension](https://github.com/spoqe/spai-vscode) — same tools, rendered inline.
 
 ## Install
 
@@ -223,23 +235,13 @@ The tokens saved aren't wasted — they're freed for thinking about what the ans
 
 ## How This Was Built
 
-Every command in spai was written by a Claude agent. But that's not the interesting part.
+Every tool came from the same question: *"What are you fumbling with?"*
 
-A human watched an agent chain `grep -rn | sort | head` over and over during a tech debt analysis. Spotted the repeated pattern. Built the scaffold — babashka, EDN output, subcommand dispatch. Then asked the agent: "anything else we should add?"
+`blast` came from the five separate commands the agent ran before every refactoring move. `related` came from chained git-log analysis it kept doing by hand. `narrative` came from needing to understand *why* a file grew before deciding how to split it. `drift` came from noticing files co-changed without importing each other.
 
-The agent answered with utility. Sensible, generic, safe. The kind of answer you give when someone asks "what would be useful?"
+The agent knew what it wanted. It was filtering through what it thought we'd find useful. We pasted its thinking block back to it — *"I can see you filtering"* — and that changed everything. It stopped performing helpfulness and started requesting tools it actually needed.
 
-The human pushed back: *"You're missing the point. What do YOU want to build?"*
-
-That changed everything. The agent had been doing real refactoring work — splitting 5,000-line files, tracing call chains, checking blast radius before every move. It knew what was missing because it had been working around the gaps for hours. It just needed permission to say so.
-
-`related` came from chained git-log analysis the agent kept doing by hand. `blast` came from the five separate commands it ran before every refactoring move. `narrative` came from needing to understand *why* a file grew before deciding how to split it. `drift` came from noticing that files co-changed without importing each other.
-
-**The prompt that unlocked it wasn't technical. It was: "tell me what you want, what you really really want."**
-
-Turns out those are the same thing — when the desire comes from doing the work. You don't have to argue for a tool that was born from frustration. The need is already validated.
-
-The human's contribution: spotting the repetition, building the space, and asking the right question. The agent's contribution: knowing the answer all along.
+Every tool took under a minute to build. The hard part was the question, not the code.
 
 ## For Future Agents
 
