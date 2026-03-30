@@ -6,6 +6,9 @@
 <title>spai — your agent is fumbling. give it the tools it asked for.</title>
 <meta name="description" content="Structured code exploration for AI agents. One command instead of five greps. 99.7% less token spend. Free and open source.">
 <meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0f1117;
@@ -52,14 +55,14 @@
     align-items: center;
     gap: 0.05em;
     font-weight: 700;
-    font-size: 1.1rem;
+    font-size: 1.4rem;
     color: var(--accent);
     text-decoration: none;
     letter-spacing: -0.02em;
   }
   nav .logo .nav-wheel {
-    width: 1.2em;
-    height: 1.2em;
+    width: 1.3em;
+    height: 1.3em;
     flex-shrink: 0;
   }
   nav .logo .nav-wheel .rim { fill: none; stroke: var(--border); stroke-width: 5; opacity: 0.3; }
@@ -131,7 +134,8 @@
     transition: all 0.2s;
     white-space: nowrap;
   }
-  .install-block .copy-btn:hover {
+  .install-block .copy-btn:hover,
+  .install-block .copy-btn:focus-visible {
     border-color: var(--accent);
     color: var(--accent);
   }
@@ -288,6 +292,7 @@
   /* ── Responsive ── */
   @media (max-width: 768px) {
     .comparison, .mcp-grid { grid-template-columns: 1fr; }
+    .img-grid { grid-template-columns: 1fr !important; }
     .hero h1 { font-size: 2.2rem; }
     .container { padding: 0 1.5rem; }
     nav { padding: 1.5rem; }
@@ -307,6 +312,15 @@
   .hero-sub { animation-delay: 0.16s; }
   .install-block { animation-delay: 0.24s; }
   .hero-meta { animation-delay: 0.32s; }
+
+  /* ── Reduced motion ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -325,6 +339,35 @@
   <div class="hero">
     <p class="hero-pain">Your AI agent just burned 180,000 tokens reading code it read yesterday. And it's about to do it again. Right now. While you read this.</p>
 
+    <div style="margin-bottom: 1.5rem;">
+      <svg width="240" height="80" viewBox="0 0 480 160" aria-hidden="true">
+        <!-- Handle -->
+        <line x1="108" y1="108" x2="140" y2="140" stroke="#8b8d97" stroke-width="14" stroke-linecap="round"/>
+        <line x1="108" y1="108" x2="140" y2="140" stroke="#6ee7b7" stroke-width="5" stroke-linecap="round" opacity="0.3"/>
+        <!-- Lens -->
+        <circle cx="72" cy="72" r="52" fill="#0f1117" fill-opacity="0.6"/>
+        <circle cx="72" cy="72" r="52" fill="none" stroke="#2a2d3a" stroke-width="6"/>
+        <circle cx="72" cy="72" r="52" fill="none" stroke="#6ee7b7" stroke-width="3" opacity="0.5"/>
+        <!-- Spokes -->
+        <line x1="72" y1="72" x2="72" y2="27" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <line x1="72" y1="72" x2="104" y2="40" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <line x1="72" y1="72" x2="117" y2="72" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <line x1="72" y1="72" x2="104" y2="104" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <line x1="72" y1="72" x2="72" y2="117" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <line x1="72" y1="72" x2="40" y2="104" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <line x1="72" y1="72" x2="27" y2="72" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <line x1="72" y1="72" x2="40" y2="40" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <!-- Hub -->
+        <circle cx="72" cy="72" r="4.5" fill="#6ee7b7" opacity="0.9"/>
+        <!-- Glint -->
+        <ellipse cx="52" cy="52" rx="13" ry="7" transform="rotate(-40,52,52)" fill="white" opacity="0.07"/>
+        <!-- Wordmark -->
+        <text x="170" y="92" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="64" font-weight="700" letter-spacing="-0.03em" fill="#e4e4e7">
+          <tspan fill="#6ee7b7">sp</tspan><tspan fill="#e4e4e7">ai</tspan>
+        </text>
+      </svg>
+    </div>
+
     <h1>Give it the tools <span class="green">it asked for.</span></h1>
 
     <p class="hero-sub">One command. 545 tokens. The answer your agent needed three minutes ago. Works with Claude, Cursor, Copilot, Aider, and more.</p>
@@ -340,16 +383,16 @@
       <span>CLI + MCP</span>
       <span>EPL licence</span>
     </p>
-    <p class="hero-meta" style="margin-top: 0.75rem;">We built spai to ship a 30,000-line query engine with AI agents. These 35 tools are what it wanted.</p>
-    <p class="hero-meta" style="margin-top: 0.75rem;">Or just try it: <code style="color: var(--accent); font-size: 0.8rem;">spai help</code> prints every tool in 200 tokens. No config. No API key. Ask your agent to explore, see what it thinks. <a href="mailto:hello@semanticpartners.com" style="color: var(--accent);">Let us know!</a></p>
   </div>
 
-  <!-- ── Five greps: the chair ── -->
+  <!-- ── Origin story → five greps ── -->
   <section>
-    <p class="section-label">The problem</p>
-    <h2 class="section-title">Five greps to answer <span class="green">one question.</span></h2>
-    <p class="section-desc">Who calls this function, and what breaks if I change it?</p>
-
+    <p class="section-label">Origin</p>
+    <h2 class="section-title">We watched the agent <span class="green">work.</span></h2>
+    <p class="section-desc" style="max-width: 600px;">We're building SPOQE &mdash; a federated query engine. One language across SQL, SPARQL, Elasticsearch, REST APIs. 30,000 lines of Rust, built with AI agents.</p>
+    <p class="section-desc" style="max-width: 600px;">The agent had made it work. It had proved our concept. But it wasn't what we were aiming for architecturally. So we began refactoring. Applied tech debt skills. The agent was making progress. But as we watched it work, we noticed something.</p>
+    <p class="section-desc" style="max-width: 600px; color: var(--text); font-weight: 500;">Not the output. The process.</p>
+    <p class="section-desc" style="max-width: 600px;">It needed to understand one function. <code>execute_plan</code>. Who calls it. What depends on it. What breaks if it changes. So it grepped. Five times. Five round-trips. 180,000 tokens. And it did the same thing again next session. Because it forgets.</p>
     <div class="comparison">
       <div class="comp-panel">
         <div class="comp-panel-header">
@@ -398,11 +441,15 @@
     </div>
   </section>
 
-  <!-- ── blast showcase ── -->
+  <!-- ── We asked the agent ── -->
   <section>
-    <p class="section-label">The headline tool</p>
-    <h2 class="section-title"><span class="green">spai blast</span></h2>
-    <p class="section-desc">Full blast radius for any symbol. Definition, callers, tests, risk assessment. One command replaces the entire exploration loop.</p>
+    <p class="section-label">The answer</p>
+    <h2 class="section-title">We asked the agent <span class="green">what it wanted.</span></h2>
+    <p class="section-desc" style="max-width: 600px;"><em style="color: var(--text);">"What are you actually doing right now?"</em></p>
+    <p class="section-desc" style="max-width: 600px; color: var(--text);">"Assessing the blast radius of this function."</p>
+    <p class="section-desc" style="max-width: 600px; color: var(--faint); font-size: 0.85rem;">(Blast radius: everything that breaks if you change something. Definition, callers, tests, dependents &mdash; the full impact surface.)</p>
+    <p class="section-desc" style="max-width: 600px;">Good phrase. Right concept. It knew what it wanted to know. It just didn't have a tool that answered in one go. We asked what else it wanted. It gave us the safe list &mdash; module overview, dependency graph. We could see it filtering &mdash; in the thinking block, the internal reasoning. We pasted it back. <em style="color: var(--text);">"I can see you filtering. What do you actually want?"</em> Pause. <em style="color: var(--faint);">"You can see my thinking block? I was told that was private."</em> Co-change analysis. Hidden coupling in the git history. The thing that doesn't show up in any import graph but shows up in every bug you can't explain.</p>
+    <p class="section-desc" style="max-width: 600px;">Every tool took under a minute to build. 200 milliseconds to run. What was taking the agent minutes now takes 200ms &mdash; and burns a fraction of the tokens.</p>
 
     <div class="blast-box">
       <div class="prompt-line">$ spai blast compile_sparql</div>
@@ -452,15 +499,15 @@
   <section>
     <p class="section-label">In your editor</p>
     <h2 class="section-title">Same tools. <span class="green">Where you already are.</span></h2>
-    <p class="section-desc">We wanted to see what the agent sees. So we built a VS Code extension. Same tools, rendered inline — treemaps, module shapes, co-change analysis.</p>
+    <p class="section-desc" style="max-width: 600px;">Every session, your agent wakes up in a repo it's never seen. <code>spai shape</code> gives it the whole module in one read &mdash; files, functions, structure, public surface. Orientation in 200 tokens instead of reading every file. We wanted to see what the agent sees, so we built a VS Code extension. Same tools, rendered inline.</p>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+    <div class="img-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
       <div>
-        <img src="hotspot-ss.png" alt="spai hotspots treemap in VS Code" style="width: 100%; border-radius: 8px; border: 1px solid var(--border);">
+        <img src="hotspot-ss.png" alt="spai hotspots treemap in VS Code — file sizes visualised as a proportional treemap" loading="lazy" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); height: auto;">
         <p style="color: var(--faint); font-size: 0.75rem; margin-top: 0.5rem;">Hotspots — largest files at a glance</p>
       </div>
       <div>
-        <img src="module-shape-ss.png" alt="spai module shape in VS Code" style="width: 100%; border-radius: 8px; border: 1px solid var(--border);">
+        <img src="module-shape-ss.png" alt="spai module shape in VS Code — files, functions, and public surface of a module" loading="lazy" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); height: auto;">
         <p style="color: var(--faint); font-size: 0.75rem; margin-top: 0.5rem;">Module shape — files, functions, structure</p>
       </div>
     </div>
@@ -479,7 +526,7 @@
 
     <div class="faq-item">
       <p class="faq-q">Can I add my own tools?</p>
-      <p class="faq-a">Any executable named <code>spai-*</code> on your PATH becomes a command. <code>spai new-plugin my-tool</code> scaffolds one. Plugins travel with the repo.</p>
+      <p class="faq-a">Any executable named <code>spai-*</code> on your PATH becomes a command. <code>spai new-plugin my-tool</code> scaffolds one. Drop project-specific plugins in <code>.spai/plugins/</code> &mdash; they travel with the repo, so every contributor and every agent gets them.</p>
     </div>
 
     <div class="faq-item">
@@ -489,12 +536,12 @@
 
     <div class="faq-item">
       <p class="faq-q">Why Babashka?</p>
-      <p class="faq-a">One 20MB binary. No JVM, no npm, no venv. Starts in 10ms. We've never hit a Python-style requests-library minor version incompatibility. If you haven't met <a href="https://babashka.org">Babashka</a>, you're welcome.</p>
+      <p class="faq-a">Clojure on <a href="https://babashka.org">Babashka</a>. spai itself is ~3000 lines of plain text &mdash; you can read every line. bb is the runtime: one 20MB binary, no JVM, no npm, no venv, no significant whitespace. Starts in 10ms. Data as code, code as data &mdash; homoiconic. The installer will tell you if you need bb and where to get it.</p>
     </div>
 
     <div class="faq-item">
       <p class="faq-q">Who built this?</p>
-      <p class="faq-a"><a href="https://semanticpartners.com">Semantic Partners</a>. We built spai to ship a 30,000-line federated query engine with AI agents. The tools emerged from watching agents struggle with a real codebase. We find it useful. Use it on most branches. The agent reaches for it. <a href="mailto:hello@semanticpartners.com">Let us know how you like it, and what tools your agent wants.</a></p>
+      <p class="faq-a"><a href="https://semanticpartners.com">Semantic Partners</a>. The story's above &mdash; we use spai on most branches now. The agent reaches for it. <a href="mailto:hello@semanticpartners.com">Let us know what tools your agent wants.</a></p>
     </div>
   </section>
 
