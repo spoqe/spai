@@ -343,7 +343,7 @@
 
   <!-- ── Hero: CTA above the fold ── -->
   <div class="hero">
-    <p class="hero-pain">Your AI agent just burned 180,000 tokens reading code it read yesterday. And it's about to do it again. Right now. While you read this.</p>
+    <p class="hero-pain">Your AI agent just burned 180,000 tokens reading code it read yesterday, and it's about to do the same thing again next session.</p>
 
     <div style="margin-bottom: 1.5rem;">
       <svg width="240" height="80" viewBox="0 0 480 160" aria-hidden="true">
@@ -376,7 +376,7 @@
 
     <h1>Give it the tools <span class="green">it asked for.</span></h1>
 
-    <p class="hero-sub">One command. 545 tokens. The answer your agent needed three minutes ago. Works with Claude, Cursor, Copilot, Aider, and more.</p>
+    <p class="hero-sub">One command, 545 tokens &mdash; the answer your agent needed three minutes ago. Works with Claude, Cursor, Copilot, Aider, and more.</p>
 
     <div class="install-block">
       <span class="prompt">$</span>
@@ -395,10 +395,10 @@
   <section>
     <p class="section-label">Origin</p>
     <h2 class="section-title">We watched the agent <span class="green">work.</span></h2>
-    <p class="section-desc" style="max-width: 600px;">We're building SPOQE &mdash; a federated query engine. One language across SQL, SPARQL, Elasticsearch, REST APIs. 30,000 lines of Rust, built with AI agents.</p>
-    <p class="section-desc" style="max-width: 600px;">The agent had made it work. It had proved our concept. But it wasn't what we were aiming for architecturally. So we began refactoring. Applied tech debt skills. The agent was making progress. But as we watched it work, we noticed something.</p>
+    <p class="section-desc" style="max-width: 600px;">We're building SPOQE &mdash; a federated query engine, one language across SQL, SPARQL, Elasticsearch, GraphQL, and REST APIs. It's about 100,000 lines of Rust now, built with AI agents.</p>
+    <p class="section-desc" style="max-width: 600px;">The agent had proved our concept, but the architecture wasn't where we wanted it. So we began refactoring, applying tech debt skills. The agent was making progress &mdash; but as we watched it work, we noticed something.</p>
     <p class="section-desc" style="max-width: 600px; color: var(--text); font-weight: 500;">Not the output. The process.</p>
-    <p class="section-desc" style="max-width: 600px;">It needed to understand one function. <code>execute_plan</code>. Who calls it. What depends on it. What breaks if it changes. So it grepped. Five times. Five round-trips. 180,000 tokens. And it did the same thing again next session. Because it forgets.</p>
+    <p class="section-desc" style="max-width: 600px;">It needed to understand one function &mdash; <code>execute_plan</code> &mdash; who calls it, what depends on it, what breaks if it changes. So it grepped five times, five round-trips, 180,000 tokens. And it did the same thing again next session, because it forgets.</p>
     <div class="comparison">
       <div class="comp-panel">
         <div class="comp-panel-header">
@@ -454,8 +454,10 @@
     <p class="section-desc" style="max-width: 600px;"><em style="color: var(--text);">"What are you actually doing right now?"</em></p>
     <p class="section-desc" style="max-width: 600px; color: var(--text);">"Assessing the blast radius of this function."</p>
     <p class="section-desc" style="max-width: 600px; color: var(--faint); font-size: 0.85rem;">(Blast radius: everything that breaks if you change something. Definition, callers, tests, dependents &mdash; the full impact surface.)</p>
-    <p class="section-desc" style="max-width: 600px;">Good phrase. Right concept. It knew what it wanted to know. It just didn't have a tool that answered in one go. We asked what else it wanted. It gave us the safe list &mdash; module overview, dependency graph. We could see it filtering &mdash; in the thinking block, the internal reasoning. We pasted it back. <em style="color: var(--text);">"I can see you filtering. What do you actually want?"</em> Pause. <em style="color: var(--faint);">"You can see my thinking block? I was told that was private."</em> Co-change analysis. Hidden coupling in the git history. The thing that doesn't show up in any import graph but shows up in every bug you can't explain.</p>
-    <p class="section-desc" style="max-width: 600px;">Every tool took under a minute to build. 200 milliseconds to run. What was taking the agent minutes now takes 200ms &mdash; and burns a fraction of the tokens.</p>
+    <p class="section-desc" style="max-width: 600px;">Good phrase, right concept. It knew what it wanted to know; it just didn't have a tool that answered in one go. We asked what else it wanted, and it gave us the safe list &mdash; module overview, dependency graph. We could see it filtering in the thinking block, the internal reasoning, so we pasted it back. <em style="color: var(--text);">"I can see you filtering. What do you actually want?"</em></p>
+    <p class="section-desc" style="max-width: 600px;"><em style="color: var(--faint);">"You can see my thinking block? I was told that was private."</em></p>
+    <p class="section-desc" style="max-width: 600px;">Co-change analysis. Hidden coupling in the git history &mdash; the thing that doesn't show up in any import graph but shows up in every bug you can't explain.</p>
+    <p class="section-desc" style="max-width: 600px;">Every tool took under a minute to build, 200 milliseconds to run. What was taking the agent minutes now takes 200ms and burns a fraction of the tokens.</p>
 
     <div class="blast-box">
       <div class="prompt-line">$ spai blast compile_sparql</div>
@@ -525,7 +527,7 @@
   <section>
     <p class="section-label">What's next</p>
     <h2 class="section-title"><span class="green">spai</span> is the first tool from SPOQE.</h2>
-    <p class="section-desc" style="max-width: 600px;">We're building a federated query engine &mdash; one language across SQL, SPARQL, Elasticsearch, and REST APIs. Your data stays where it is. No ETL. No data movement. spai's agent memory will be built on it.</p>
+    <p class="section-desc" style="max-width: 600px;">We're building a federated query engine &mdash; one language across SQL, SPARQL, Elasticsearch, GraphQL, and REST APIs. Your data stays where it is (if you want). RDF-aware. No ETL. No data movement. spai's agent memory will be built on it.</p>
     <p class="section-desc" style="max-width: 600px;"><strong style="color: var(--text);">spai is free, today.</strong> SPOQE is coming. Leave your email &mdash; we'll let you know when it's live. One email. No spam.</p>
 
     <form id="signup-form" style="display: flex; gap: 0.75rem; max-width: 420px; margin-top: 1.5rem;">
