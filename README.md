@@ -1,18 +1,12 @@
 # spai
 
-**Your agent is fumbling. Give it the tools it asked for.**
+Structured code exploration for AI agents. One command instead of five greps. 545 tokens instead of 180,000.
 
-We were building a 30,000-line federated query engine with AI agents. The agent was making progress — but we watched it grep five times to answer one question. Every session. Because it forgets.
+Your agent wakes up every session in a codebase it's never seen. No memory, no orientation, no map. spai gives it the map — module structure, blast radius, co-change analysis, reverse deps — so it can get up to speed in seconds, not minutes. Without a full memory system. Without burning your context window on exploration.
 
-We asked it: *"What are you actually doing right now?"*
+Works with any agent that can run a shell command.
 
-*"Assessing the blast radius of this function."*
-
-So we built `spai blast`. Thirty seconds. 200 milliseconds to run. 545 tokens instead of 180,000. Then we asked what else it wanted. 35 tools later, here we are.
-
-Code exploration and structural editing for LLM agents. Babashka, structured EDN output, no frameworks. Works with any agent that can run a shell command.
-
-**35 tools · CLI + MCP · EPL licence · [spai.spoqe.dev](https://spai.spoqe.dev)**
+**35 tools · CLI + MCP · Babashka · EPL licence · [spai.spoqe.dev](https://spai.spoqe.dev)**
 
 ## Install
 
