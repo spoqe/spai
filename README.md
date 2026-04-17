@@ -12,7 +12,9 @@ Works with any agent that can run a shell command.
 |----------|-------------|-----------|
 | ![Hotspots treemap](docs/hotspot-ss.png) | ![Module shape](docs/module-shape-ss.png) | ![Co-change analysis](docs/co-change-ss.png) |
 
-Also available as a [VS Code extension](https://github.com/spoqe/spai-vscode) — same tools, rendered inline.
+Also available as a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=spoqe.spai) ([source](https://github.com/spoqe/spai-vscode)) — same tools, rendered inline.
+
+Part of the [SPOQE](https://github.com/spoqe/spoqe) family — federated query tools for data and code that live where they are.
 
 ## Install
 
@@ -232,6 +234,24 @@ LLM agents waste tokens on three things:
 **Compression is abstraction. Abstraction enables reasoning.**
 
 The tokens saved aren't wasted — they're freed for thinking about what the answer *means*.
+
+## Why Babashka?
+
+**Startup.** bb launches in ~20ms. A Python venv + imports takes 200ms–2s. For a tool that fires on right-clicks and MCP calls, that latency compounds fast.
+
+**EDN is native.** spai's output format is EDN — keywords, sets, tagged literals. In bb, that's just data. In Python you'd round-trip through JSON, losing type fidelity every time.
+
+**Structural editing for free.** spai-edit uses rewrite-clj, which ships inside babashka. Editing Clojure/EDN structurally in Python would mean writing a parser or shelling out to a JVM.
+
+**Plugin discovery is just data.** A plugin is a single script with an EDN map as frontmatter. `spai plugins` reads the metadata without executing anything. No `setup.py`, no `requirements.txt`, no `__init__.py`.
+
+**Stability.** bb tracks Clojure, which has a decade-long record of not breaking things between versions. Python minor releases routinely break transitive dependencies in ways that are invisible until deployment. For a tool that installs globally and runs across every project, that matters.
+
+**Homoiconicity.** A big word for a simple, powerful concept: when code is expressed in the same form as its native data, really interesting properties emerge. The tool metadata, the tool output, and the queries the tools serve are all EDN. One format to read, one to parse, one to transform. Plugin frontmatter isn't a schema bolted onto code — it's the same data the plugin produces.
+
+**SPOQE is EDN.** spai exists to serve SPOQE. The query language, wire protocol, and config are all EDN. A Clojure dialect manipulating Clojure data is the natural choice.
+
+Could plugins be written in Python? There's nothing preventing it — `spai foo` calls `spai-foo`, which can be any executable. The core is bb because that's where the leverage is. Your plugin can be whatever you want.
 
 ## How This Was Built
 
