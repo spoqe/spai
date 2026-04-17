@@ -12,7 +12,7 @@ Works with any agent that can run a shell command.
 |----------|-------------|-----------|
 | ![Hotspots treemap](docs/hotspot-ss.png) | ![Module shape](docs/module-shape-ss.png) | ![Co-change analysis](docs/co-change-ss.png) |
 
-Also available as a [VS Code extension](https://github.com/spoqe/spai-vscode) — same tools, rendered inline.
+Also available as a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=spoqe.spai) ([source](https://github.com/spoqe/spai-vscode)) — same tools, rendered inline.
 
 ## Install
 
