@@ -270,21 +270,39 @@
       (warn (str "spai-mcp.bb not found at " mcp-script " — skipping MCP setup"))
       (System/exit 0))
     (cond
+      (contains? flags "--no-mcp")
+      (info "Skipping MCP server registration (--no-mcp)")
+
       (contains? flags "--mcp")
       (install-mcp)
 
       interactive?
       (do (println)
-          (info "spai MCP server available!")
-          (println "  Exposes spai tools (memory, shape, blast, etc.) natively in Claude Code.")
-          (println "  Claude sees them as first-class tools, not shell commands.")
+          (info "MCP server registration — optional.")
           (println)
-          (when (ask "Register spai MCP server?" :y)
+          (println "  spai can be registered as an MCP server, exposing its tools as native")
+          (println "  Claude tools (alongside Bash, Read, Grep, etc.).")
+          (println)
+          (println "  Why you might want it:")
+          (println "    • Native tool integration — tools appear in Claude's UI")
+          (println "    • Your framework/agent expects MCP")
+          (println)
+          (println "  Why you might NOT want it:")
+          (println "    • MCP eagerly loads ~42k tokens of tool schemas at session start —")
+          (println "      whether you use them or not.")
+          (println "    • The CLI approach (spai help + spai search) is lazy — loads ~1.2k")
+          (println "      tokens on demand. 94% fewer tokens, same capabilities.")
+          (println "    • Claude can always run spai as a shell command regardless.")
+          (println)
+          (println "  Recommended: skip MCP, use the CLI. You can always add it later:")
+          (println "    spai setup --mcp")
+          (println)
+          (when (ask "Register spai MCP server anyway?" :n)
             (install-mcp)))
 
       :else
       (do (println)
-          (info "To register spai as an MCP server:")
+          (info "To register spai as an MCP server (optional — adds ~42k tokens to Claude context):")
           (println "  spai setup --mcp")))))
 
 ;; --- Main ---
