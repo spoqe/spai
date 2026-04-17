@@ -14,6 +14,8 @@ Works with any agent that can run a shell command.
 
 Also available as a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=spoqe.spai) ([source](https://github.com/spoqe/spai-vscode)) — same tools, rendered inline.
 
+Part of the [SPOQE](https://github.com/spoqe/spoqe) family — federated query tools for data and code that live where they are.
+
 ## Install
 
 ```bash
