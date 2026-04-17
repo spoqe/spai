@@ -594,8 +594,12 @@
     </div>
 
     <div class="faq-item">
-      <p class="faq-q">Why Babashka?</p>
-      <p class="faq-a">Clojure on <a href="https://babashka.org">Babashka</a>. spai itself is ~3000 lines of plain text &mdash; you can read every line. bb is the runtime: one 20MB binary, no JVM, no npm, no venv, no significant whitespace. Starts in 10ms. Data as code, code as data &mdash; homoiconic. The installer will tell you if you need bb and where to get it.</p>
+      <p class="faq-q">Why Babashka, why not Python?</p>
+      <p class="faq-a"><a href="https://babashka.org">Babashka</a> (bb) starts in 20ms. A Python venv + imports takes 200ms&ndash;2s. For a tool that fires on every right-click, that compounds fast.</p>
+      <p class="faq-a">Beyond startup: spai's output is EDN &mdash; keywords, sets, tagged literals. In bb that's just data; in Python you'd round-trip through JSON and lose type fidelity. Plugin metadata is an EDN map at the top of the script &mdash; same data the plugin produces. No <code>setup.py</code>, no <code>requirements.txt</code>, no <code>__init__.py</code>.</p>
+      <p class="faq-a"><strong>Homoiconicity</strong> is a big word for a simple, powerful concept: when code is expressed in the same form as its native data, really interesting properties emerge. The tool metadata, the tool output, and the queries the tools serve are all EDN. One format to read, one to parse, one to transform.</p>
+      <p class="faq-a">And stability: bb tracks Clojure, which has a decade-long record of not breaking between versions. Python minor releases routinely break transitive deps. For a tool installed globally across every project, that matters.</p>
+      <p class="faq-a">Plugins can be any executable &mdash; <code>spai foo</code> calls <code>spai-foo</code>, write it in whatever you want. The core is bb because that's where the leverage is. One 20MB binary, no JVM, no npm, no venv, no significant whitespace.</p>
     </div>
 
     <div class="faq-item">
