@@ -110,7 +110,7 @@
 
   (when-not (fs/directory? plugin-dir)
     (println \"spai plugin dir not found:\" plugin-dir)
-    (println \"Install spai first: https://github.com/Semantic-partners/spai\")
+    (println \"Install spai first: https://github.com/spoqe/spai\")
     (System/exit 1))
 
   (doseq [plugin (fs/glob script-dir \"plugins/spai-*\")
