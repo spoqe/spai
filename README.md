@@ -31,47 +31,48 @@ Installs `spai` and `spai-edit` to `~/.local/bin/`. Requires [babashka](https://
 
 ## Two ways to connect: MCP or CLI
 
-spai supports both MCP (tool schemas) and plain CLI (shell commands). Both expose the same tools. The difference is how your agent discovers them.
+spai supports both MCP (tool schemas) and plain CLI (shell commands). Both expose the same tools. **The installer asks you which** — the default is CLI. You can always change your mind later.
 
-### MCP (eager loading)
+| | **MCP** | **CLI (default)** |
+|---|---|---|
+| **How tools are loaded** | Eagerly — all schemas at session start | Lazily — `spai help` on demand |
+| **Context cost** | ~42,000 tokens up front | ~1,200 tokens when invoked |
+| **Where tools appear** | In Claude's native tool UI | As shell commands Claude runs |
+| **Works across sessions** | Yes (registered once) | Yes (just on PATH) |
+| **Works without Claude Code** | MCP client required | Any agent that can run shell |
 
-MCP dumps full tool schemas into the agent's context at session start — ~42k tokens for the full spai toolkit. Use this if your framework expects MCP or you want native tool integration.
+### Why you *might* want MCP
 
-```json
-{
-  "mcpServers": {
-    "spai": {
-      "type": "stdio",
-      "command": "bb",
-      "args": ["~/.local/share/spai/spai-mcp.bb"]
-    }
-  }
-}
-```
+- **Your framework expects it.** Some agent harnesses only discover tools through MCP.
+- **Native tool UI.** Tools appear alongside Bash/Read/Grep in Claude's interface, with typed schemas and argument hints.
+- **Strict tool gating.** MCP gives you a fixed tool surface the agent can see; useful for agents you want to constrain.
 
-Or register globally:
+### Why you *might not*
+
+- **~42k tokens is a lot.** That's context the agent pays whether or not it uses any of them. For small codebases or short sessions, most of that tax is wasted.
+- **Tool catalogs grow.** spai already has 35+ tools. If you drop in plugins, the schema balloon grows with you.
+- **CLI is just as capable.** Claude can always run `spai shape src/` as a shell command. No capability is locked behind MCP.
+- **Lazy discovery composes.** `spai help` is 1.2k tokens. `spai search "find class predicates"` uses a local model to surface the right tool. The agent loads what it needs, when it needs it — the [follow-your-nose](https://en.wikipedia.org/wiki/Follow-your-nose_(computing)) pattern from Linked Data.
+
+**Rule of thumb:** if you're using Claude Code interactively on real codebases, start with CLI. If you're building an autonomous agent with a strict tool contract, MCP makes sense.
+
+### How to enable each
 
 ```bash
+# MCP (opt-in during install, or after)
+spai setup --mcp
+
+# Global MCP registration (bypasses spai setup)
 claude mcp add --transport stdio spai -- bb ~/.local/share/spai/spai-mcp.bb
+
+# CLI — nothing to enable. Just run:
+spai help
+spai shape src/
 ```
 
-### CLI (lazy loading) — recommended
+### Bonus: Claude Code Reminder Hook (independent)
 
-The CLI approach loads nothing upfront. The agent calls `spai help` when it needs the catalog (~1,200 tokens for 35+ tools), or `spai search "question"` to find the right command via natural language using a local model. 94% fewer tokens, same capabilities.
-
-```bash
-spai help                          # Compact tool catalog (~1.2k tokens)
-spai search "find class predicates" # NL search via local qwen (optional)
-spai shape src/                     # Just run the command
-```
-
-This is the [follow-your-nose](https://en.wikipedia.org/wiki/Follow-your-nose_(computing)) pattern from RDF/Linked Data: don't download the whole schema, follow links to what you need. The agent discovers tools on demand, not all at once.
-
-### Why this matters
-
-MCP's eager loading made sense when tool catalogs were small. At 35+ tools with rich schemas, the upfront cost is significant — tokens the agent pays whether or not it uses the tools. The CLI approach lets the agent keep its context window for thinking instead of caching tool descriptions it may never need.
-
-Both approaches are fully supported. Use whichever fits your setup.
+Separate from MCP: if you use Claude Code, spai can install a **PreToolUse hook** that nudges the agent toward spai commands when it reaches for raw `Grep`, `Glob`, or `Bash`. This works with or without MCP — it's about catching the moment Claude falls back to grep-chaining and redirecting to the structured equivalent. See [Claude Code Hook](#claude-code-hook) below.
 
 ## spai — Code Exploration
 
@@ -197,7 +198,9 @@ The tool walks up the directory tree to find config, so it works from any subdir
 
 ## Claude Code Hook
 
-If you use [Claude Code](https://claude.ai/code), spai includes an optional hook that catches grep-based code exploration and suggests the spai equivalent. Knowing is not doing — this intervenes at the moment of the mistake.
+If you use [Claude Code](https://claude.ai/code), spai includes an optional **PreToolUse hook** that catches grep-based code exploration and suggests the spai equivalent. Knowing is not doing — this intervenes at the moment of the mistake.
+
+This hook is **independent of MCP** — it works whether you register the MCP server or not. If you declined MCP during install, the hook is still useful (arguably more useful, since without MCP the agent doesn't have spai in its tool list and needs the nudge). The installer offers it separately.
 
 **Install with spai:**
 ```bash
