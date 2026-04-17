@@ -11,10 +11,11 @@
 
 INPUT=$(cat)
 
-# Extract tool name and parameters from the hook input
+# Extract tool name, parameters, and Claude session id from the hook input
 TOOL_NAME=""
 COMMAND=""
 PATTERN=""
+SESSION_ID=""
 
 if echo "$INPUT" | grep -q '"tool_name"'; then
     TOOL_NAME=$(echo "$INPUT" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
@@ -25,14 +26,20 @@ fi
 if echo "$INPUT" | grep -q '"pattern"'; then
     PATTERN=$(echo "$INPUT" | sed -n 's/.*"pattern"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 fi
+if echo "$INPUT" | grep -q '"session_id"'; then
+    SESSION_ID=$(echo "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+fi
 
 # Skip if already using spai
 echo "$COMMAND$PATTERN" | grep -q "spai" && exit 0
 
 # --- Session tracking ---
+# Use Claude's session_id so counts persist across hook invocations in the same session.
+# Fall back to parent PID (the Claude process) if session_id isn't provided.
 TRACK_DIR="/tmp/spai-hooks"
 mkdir -p "$TRACK_DIR"
-SESSION_FILE="$TRACK_DIR/session-$$-$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')"
+SESSION_KEY="${SESSION_ID:-$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')}"
+SESSION_FILE="$TRACK_DIR/session-$SESSION_KEY"
 COUNT=0
 [ -f "$SESSION_FILE" ] && COUNT=$(cat "$SESSION_FILE")
 
