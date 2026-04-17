@@ -109,12 +109,78 @@ bb "$SHARE_DIR/spai-edit.clj" "\$@"
 EOF
 chmod +x "$BIN_DIR/spai-edit"
 
+# --- Phase 1.5: Ensure babashka (bb) is available ---
+
+if ! command -v bb &>/dev/null; then
+  warn "babashka (bb) not found — spai needs it to run."
+
+  # Detect platform and package manager
+  BB_CMD=""
+  BB_LABEL=""
+  OS="$(uname -s)"
+
+  if [ "$OS" = "Darwin" ]; then
+    if command -v brew &>/dev/null; then
+      BB_CMD="brew install borkdude/brew/babashka"
+      BB_LABEL="brew"
+    fi
+  elif [ "$OS" = "Linux" ]; then
+    if command -v apt-get &>/dev/null; then
+      BB_CMD="sudo bash -c 'curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install && rm install'"
+      BB_LABEL="babashka installer (requires sudo)"
+    elif command -v dnf &>/dev/null; then
+      BB_CMD="sudo bash -c 'curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install && rm install'"
+      BB_LABEL="babashka installer (requires sudo)"
+    elif command -v pacman &>/dev/null; then
+      BB_CMD="sudo bash -c 'curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install && rm install'"
+      BB_LABEL="babashka installer (requires sudo)"
+    elif command -v nix-env &>/dev/null; then
+      BB_CMD="nix-env -i babashka"
+      BB_LABEL="nix"
+    fi
+  fi
+
+  # Fallback: babashka's own installer to ~/.local/bin (no sudo)
+  if [ -z "$BB_CMD" ]; then
+    BB_CMD="bash <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install) --dir $BIN_DIR"
+    BB_LABEL="babashka installer (to $BIN_DIR)"
+  fi
+
+  echo ""
+  echo "  Will run: $BB_CMD"
+  echo ""
+
+  if [ -t 0 ]; then
+    # Interactive — ask the user
+    printf "  Install babashka via %s? [Y/n] " "$BB_LABEL"
+    read -r REPLY
+    REPLY="${REPLY:-Y}"
+  else
+    # Non-interactive (piped curl | bash) — default yes, show what's happening
+    info "Non-interactive mode — installing babashka via $BB_LABEL"
+    REPLY="Y"
+  fi
+
+  if [[ "$REPLY" =~ ^[Yy] ]]; then
+    eval "$BB_CMD"
+    if command -v bb &>/dev/null; then
+      info "babashka installed: $(bb --version)"
+    else
+      warn "babashka install may have succeeded but bb is not on PATH yet."
+      echo "  Try opening a new terminal, then run: spai setup"
+    fi
+  else
+    warn "Skipping babashka install."
+    echo "  Install manually: https://babashka.org"
+    echo "  Then run: spai setup"
+  fi
+fi
+
 # --- Phase 2: Setup (via bb if available) ---
 
 if command -v bb &>/dev/null; then
   bb "$SHARE_DIR/setup.clj" "$@"
 else
-  warn "babashka (bb) not found — skipping setup"
-  echo "  Install bb: https://babashka.org"
-  echo "  Then run:   spai setup"
+  warn "babashka (bb) still not found — skipping setup"
+  echo "  Once bb is on your PATH, run: spai setup"
 fi
