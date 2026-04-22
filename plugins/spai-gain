@@ -213,8 +213,9 @@
                            (bar ratio 10))))))
     (println (rule 71))
     (println))
-  (println (dim "  Note: tokens are estimated. RTK compresses output you ran (byte-level);"))
-  (println (dim "  spai skips calls you didn't need to make (operation-level). They stack."))
+  (println (dim "  Estimates, not exact. RTK reformats the output of commands that ran;"))
+  (println (dim "  spai absorbs grep-chains so their output never reaches the agent at all."))
+  (println (dim "  They don't add up — they're mutually beneficial. Use both."))
   (println))
 
 (defn -main [& argv]
