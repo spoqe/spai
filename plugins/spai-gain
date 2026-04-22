@@ -213,9 +213,11 @@
                            (bar ratio 10))))))
     (println (rule 71))
     (println))
-  (println (dim "  Estimates, not exact. RTK and spai are mutually beneficial:"))
-  (println (dim "    RTK compacts common-command output (fixed set of wrappers in Rust)"))
-  (println (dim "    spai absorbs grep-chains; plugins are bb scripts the agent can write live"))
+  (println (dim "  Estimates, not exact. RTK reformats a fixed set of commands."))
+  (println (dim "  spai does three things RTK can't:"))
+  (println (dim "    • absorbs grep-chains into one structured call (saves context)"))
+  (println (dim "    • surfaces repeated sequences across sessions (spai reflect)"))
+  (println (dim "    • your agent writes the consolidating plugin — 30s, no PR anywhere"))
   (println))
 
 (defn -main [& argv]
