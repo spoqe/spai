@@ -61,18 +61,21 @@
     (str xdg "/spai/usage.log")))
 
 (defn parse-argv [argv]
-  (loop [xs (vec argv), out {:format "json"}]
+  ;; Normalise three-dash typos like '---format' → '--format'
+  (loop [xs (mapv #(str/replace % #"^-{3,}" "--") (vec argv))
+         out {:format "text" :by-command true}]
     (if (empty? xs)
       out
       (let [a (first xs), rst (subvec xs 1)]
         (cond
           (or (= a "-h") (= a "--help"))
-          (do (println "Usage: spai gain [--format json|text] [-p|--project] [--by-command]")
+          (do (println "Usage: spai gain [--format json|text] [-p|--project] [--no-by-command]")
               (println "Estimates tokens saved by using spai over grep-chain equivalents.")
               (println "Complements RTK: RTK saves on output you ran, spai saves on calls you didn't make.")
               (System/exit 0))
           (or (= a "-p") (= a "--project"))
           (recur rst (assoc out :project (System/getProperty "user.dir")))
+          (= a "--no-by-command") (recur rst (assoc out :by-command false))
           (= a "--by-command") (recur rst (assoc out :by-command true))
           (or (= a "-f") (= a "--format"))
           (recur (vec (rest rst)) (assoc out :format (first rst)))
@@ -114,28 +117,105 @@
   (->> entries
        (group-by :command)
        (map (fn [[cmd es]]
-              [cmd (-> (summarize es)
-                       (select-keys [:total_commands :total_input :total_output :total_saved]))]))
+              (let [summ (summarize es)
+                    avg-pct (if (pos? (:total_input summ))
+                              (double (* 100 (/ (:total_saved summ) (:total_input summ))))
+                              0.0)]
+                [cmd (-> summ
+                         (select-keys [:total_commands :total_input :total_output :total_saved])
+                         (assoc :avg_pct avg-pct))])))
        (sort-by (fn [[_ m]] (- (:total_saved m))))
        vec))
 
-(defn print-text [s by-cmd]
-  (println (str "spai gain — operations-avoided estimate"))
-  (println)
-  (println (format "  Commands run    %d" (:total_commands s)))
-  (println (format "  Equivalent in   %,d tokens" (:total_input s)))
-  (println (format "  spai output     %,d tokens" (:total_output s)))
-  (println (format "  Saved           %,d tokens (%.1f%%)"
-                   (:total_saved s) (:avg_savings_pct s)))
-  (println)
-  (when (seq by-cmd)
-    (println "  By command:")
-    (doseq [[cmd m] by-cmd]
-      (println (format "    %-14s %6d calls, saved %,d tokens"
-                       cmd (:total_commands m) (:total_saved m))))
+;; ---------- Pretty text (RTK-style) ----------
+
+(def ^:private tty? (boolean (System/console)))
+(defn- c [code s] (if tty? (str "\033[" code "m" s "\033[0m") s))
+(def  ^:private bold  (partial c "1"))
+(def  ^:private dim   (partial c "2"))
+(def  ^:private red   (partial c "31"))
+(def  ^:private green (partial c "32"))
+(def  ^:private yellow (partial c "33"))
+(def  ^:private blue  (partial c "34"))
+(def  ^:private cyan  (partial c "36"))
+(def  ^:private gray  (partial c "90"))
+
+(defn- fmt-num
+  "Abbreviate: 1_234_567 → '1.2M', 12_345 → '12.3K', 987 → '987'."
+  [n]
+  (let [n (long n)]
+    (cond
+      (>= (Math/abs n) 1000000) (format "%.1fM" (/ n 1e6))
+      (>= (Math/abs n) 1000)    (format "%.1fK" (/ n 1e3))
+      :else (str n))))
+
+(defn- pct-colour [pct]
+  (cond
+    (< pct 50)  red
+    (< pct 80)  yellow
+    :else       green))
+
+(defn- bar
+  "Build an impact bar: 'filled' chars of `on`, rest of `off`, width `w`."
+  [ratio w]
+  (let [filled (int (Math/round (* ratio w)))
+        empty  (- w filled)]
+    (str (cyan (apply str (repeat filled "█")))
+         (gray (apply str (repeat empty "░"))))))
+
+(defn- rule [w] (gray (apply str (repeat w "─"))))
+
+(defn print-text [s by-cmd scope]
+  (let [scope-label (if scope (str "Project: " scope) "Global Scope")]
+    (println)
+    (println (str " " (bold (green "spai gain")) " — "
+                  (dim "operations-avoided") "   "
+                  (gray (str "(" scope-label ")"))))
+    (println (gray "════════════════════════════════════════════════════════════"))
+    (println)
+    ;; Summary block (RTK-style labels, right-aligned values)
+    (println (str "  Commands run     " (bold (format "%d" (:total_commands s)))))
+    (println (str "  Equivalent in    " (bold (fmt-num (:total_input s)))  (dim " tokens")))
+    (println (str "  spai output      " (bold (fmt-num (:total_output s))) (dim " tokens")))
+    (let [saved-s (fmt-num (:total_saved s))
+          pct     (:avg_savings_pct s)
+          pct-s   ((pct-colour pct) (format "%.1f%%" pct))]
+      (println (str "  Saved            " (bold (green saved-s)) (dim " tokens") "  " pct-s)))
+    ;; Efficiency meter
+    (let [pct (:avg_savings_pct s)
+          w   24
+          ratio (/ pct 100.0)
+          filled (int (Math/round (* ratio w)))
+          empty  (- w filled)
+          meter  (str (green (apply str (repeat filled "█")))
+                      (gray (apply str (repeat empty "░"))))]
+      (println (str "  Efficiency       " meter "  " ((pct-colour pct) (format "%.1f%%" pct)))))
     (println))
-  (println "  Note: tokens are estimated. RTK (byte-level compression)")
-  (println "  and spai (operation-level avoidance) complement each other."))
+  (when (seq by-cmd)
+    (println (str " " (bold (green "By Command"))))
+    (println (rule 71))
+    (println (str "   # " (bold "Command")
+                  (apply str (repeat (- 16 (count "Command")) " "))
+                  (bold "  Count") "   " (bold "Saved") "   " (bold "Avg%") "    " (bold "Impact")))
+    (println (rule 71))
+    (let [max-saved (apply max 1 (map #(-> % second :total_saved) by-cmd))]
+      (doseq [[idx [cmd m]] (map-indexed vector (take 12 by-cmd))]
+        (let [ratio (/ (:total_saved m) (double max-saved))
+              pct-fn (pct-colour (:avg_pct m))
+              cmd-disp (if (> (count cmd) 14) (str (subs cmd 0 13) "…") cmd)]
+          (println (format " %2d.  %s%s %5d   %6s   %s   %s"
+                           (inc idx)
+                           (cyan (format "%-14s" cmd-disp))
+                           ""
+                           (:total_commands m)
+                           (fmt-num (:total_saved m))
+                           (pct-fn (format "%5.1f%%" (:avg_pct m)))
+                           (bar ratio 10))))))
+    (println (rule 71))
+    (println))
+  (println (dim "  Note: tokens are estimated. RTK compresses output you ran (byte-level);"))
+  (println (dim "  spai skips calls you didn't need to make (operation-level). They stack."))
+  (println))
 
 (defn -main [& argv]
   (let [opts (parse-argv argv)
@@ -150,7 +230,7 @@
                        (cond-> {:summary summary}
                          by-cmd (assoc :by_command (into {} by-cmd)))
                        {:pretty true}))
-      "text" (print-text summary by-cmd)
+      "text" (print-text summary by-cmd (:project opts))
       (do (println "Unknown format:" (:format opts))
           (System/exit 1)))))
 
