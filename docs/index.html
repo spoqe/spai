@@ -589,6 +589,14 @@
     </div>
 
     <div class="faq-item">
+      <p class="faq-q">How does spai compare to RTK?</p>
+      <p class="faq-a"><a href="https://github.com/rtk-ai/rtk">RTK</a> is a great tool — we run it. RTK wraps common commands (<code>ls</code>, <code>grep</code>, <code>git</code>, test runners, build tools) and reformats their output so less noise hits your agent's context. Byte-level compression, Rust-native, fast. If you're writing agents, install it.</p>
+      <p class="faq-a">spai sits on a different axis. RTK compacts the output of commands that <em>ran</em>; spai absorbs entire grep-chains so their output <em>never reaches the agent at all</em>. One <code>spai blast</code> replaces five greps, two reads, and a git log. The agent sees a single structured answer.</p>
+      <p class="faq-a">The deeper distinction is extension. RTK's command set is fixed in its Rust source — adding one means a PR upstream. spai plugins are bb scripts: your agent can scaffold a new one in 30 seconds when it notices a 5-step pattern it keeps repeating, drop it in <code>.spai/plugins/</code>, and future calls collapse automatically. <code>spai reflect</code> even points at which chains to eliminate. The tool learns as you use it.</p>
+      <p class="faq-a">They're not additive (you don't get 90% + 60%). They're <strong>mutually beneficial</strong>: RTK on the commands you still run, spai on the chains you no longer need to. <code>spai gain</code> reports spai's savings in an RTK-compatible JSON shape so dashboards can aggregate both.</p>
+    </div>
+
+    <div class="faq-item">
       <p class="faq-q">Why not an LSP / code tree analysis?</p>
       <p class="faq-a">Indexing takes time — especially while editing. Even Claude Code started with AST analysis, then reverted to grepping. All spai does is make the grepping more efficient. No index to build, no index to break.</p>
     </div>
