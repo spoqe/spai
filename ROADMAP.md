@@ -43,11 +43,9 @@ With SPOQE: persistent KG memory for agents across sessions.
 - [ ] Works offline
 
 ### Hosted Memory (Teams)
-- [ ] `MEMORY_URL=https://memory.spoqe.dev/team-xyz`
+- [ ] Optional hosted memory backend for teams
 - [ ] Shared agent memory: Developer A's Claude learns, Developer B's Claude finds it
-- [ ] Auth via policy (SPOQE's access control layer)
-- [ ] Multi-tenant isolation
-- [ ] The real federation story: cross-developer, cross-VM agent knowledge
+- [ ] Per-team auth and multi-tenant isolation
 
 ### Memory Operations
 - [x] Create: `spai remember "text" +topic/name`

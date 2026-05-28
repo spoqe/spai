@@ -460,17 +460,17 @@
     <p class="section-desc" style="max-width: 600px;">Every tool took under a minute to build, 200 milliseconds to run. What was taking the agent minutes now takes 200ms and burns a fraction of the tokens.</p>
 
     <div class="blast-box">
-      <div class="prompt-line">$ spai blast compile_sparql</div>
+      <div class="prompt-line">$ spai blast renderUserCard</div>
       <div class="output-label">definition</div>
       <div class="output">
-        <div class="hl">src/edna/compile.rs:89 fn compile_sparql(plan: &Plan) -> Result&lt;String&gt;</div>
+        <div class="hl">src/ui/render.rs:89 fn renderUserCard(ctx: &Context) -> Result&lt;Html&gt;</div>
       </div>
       <div class="output-label">callers (4)</div>
       <div class="output">
-        src/federation/execute.rs:201 execute_step<br>
-        src/server/handler.rs:45 handle_query<br>
-        src/edna/plan.rs:312 parseRequest<br>
-        tests/sparql_test.rs:18 test_basic_select
+        src/web/handler.rs:201 dispatch_request<br>
+        src/web/router.rs:45 route_match<br>
+        src/ui/components.rs:312 render_avatar<br>
+        tests/render_test.rs:18 test_basic_card
       </div>
       <div class="output-label">risk</div>
       <div class="output">

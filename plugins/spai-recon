@@ -10,7 +10,7 @@
 
 {:spai/args    "<symbol-or-file> [path]"
  :spai/returns "EDN map: blast radius, module shape, reverse deps, memory insights"
- :spai/example "spai recon parseRequest"}
+ :spai/example "spai recon renderUserCard"}
 
 (require '[clojure.java.io :as io]
          '[clojure.string :as str]
@@ -29,9 +29,9 @@
   (println "  file    → shape of directory, reverse deps, memory, co-change history")
   (println)
   (println "Examples:")
-  (println "  spai recon parseRequest")
+  (println "  spai recon renderUserCard")
   (println "  spai recon main.rs")
-  (println "  spai recon execute_core_eval my-crate/")
+  (println "  spai recon processRequest src/handlers/")
   (System/exit 0))
 
 ;; Is the target a file path?
