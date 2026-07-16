@@ -1,0 +1,10 @@
+# Cloudflare Pages config for the `spai` project → spai-doj.pages.dev.
+# Git-connected static build (no build command); this file puts the build
+# output dir under source control instead of relying on dashboard settings.
+#
+# The public landing page lives in docs/. spoqe.dev serves a synced COPY of
+# docs/index.html from the spoqe/spoqe repo while SPOQE is pre-launch — keep
+# the two in sync when editing this page.
+name = "spai"
+pages_build_output_dir = "docs"
+compatibility_date = "2026-07-16"
