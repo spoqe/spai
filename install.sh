@@ -31,7 +31,9 @@ mkdir -p "$SHARE_DIR" "$SHARE_DIR/plugins" "$BIN_DIR"
 [ -f "$SHARE_DIR/spai.clj" ] && warn "Existing install found. Updating..."
 
 # Detect: are we running from inside a clone?
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# When piped (curl | bash) BASH_SOURCE[0] is unset — under `set -u` that would
+# abort, so fall back to $0 (which resolves to the CWD, where there's no clone).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
 
 VERSION_HASH="unknown"
 VERSION_ORIGIN=""
@@ -40,9 +42,16 @@ if [ -f "$SCRIPT_DIR/spai.clj" ]; then
   info "Installing from local clone ($SCRIPT_DIR)..."
   VERSION_HASH="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")"
   VERSION_ORIGIN="$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null || echo "")"
-  # Don't clobber user data (usage.log)
-  rsync -a --exclude='usage.log' --exclude='.git/' \
-    "$SCRIPT_DIR/" "$SHARE_DIR/"
+  # Don't clobber user data (usage.log). Prefer rsync; fall back to cp where
+  # rsync isn't installed (common on minimal Linux images).
+  if command -v rsync &>/dev/null; then
+    rsync -a --exclude='usage.log' --exclude='.git/' \
+      "$SCRIPT_DIR/" "$SHARE_DIR/"
+  else
+    cp -r "$SCRIPT_DIR"/. "$SHARE_DIR/" 2>/dev/null || true
+    rm -rf "$SHARE_DIR/.git" 2>/dev/null || true
+    rm -f "$SHARE_DIR/usage.log" 2>/dev/null || true
+  fi
 elif command -v git &>/dev/null; then
   info "Downloading spai..."
   rm -rf "${SHARE_DIR}.tmp"
@@ -111,39 +120,30 @@ chmod +x "$BIN_DIR/spai-edit"
 
 # --- Phase 1.5: Ensure babashka (bb) is available ---
 
+# A freshly-created ~/.local/bin is often not yet on PATH in this shell.
+# Put it there now so a bb we install below is visible to `command -v` and setup.
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) export PATH="$BIN_DIR:$PATH" ;;
+esac
+
 if ! command -v bb &>/dev/null; then
   warn "babashka (bb) not found — spai needs it to run."
 
-  # Detect platform and package manager
+  OS="$(uname -s)"
   BB_CMD=""
   BB_LABEL=""
-  OS="$(uname -s)"
 
-  if [ "$OS" = "Darwin" ]; then
-    if command -v brew &>/dev/null; then
-      BB_CMD="brew install borkdude/brew/babashka"
-      BB_LABEL="brew"
-    fi
-  elif [ "$OS" = "Linux" ]; then
-    if command -v apt-get &>/dev/null; then
-      BB_CMD="sudo bash -c 'curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install && rm install'"
-      BB_LABEL="babashka installer (requires sudo)"
-    elif command -v dnf &>/dev/null; then
-      BB_CMD="sudo bash -c 'curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install && rm install'"
-      BB_LABEL="babashka installer (requires sudo)"
-    elif command -v pacman &>/dev/null; then
-      BB_CMD="sudo bash -c 'curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install && rm install'"
-      BB_LABEL="babashka installer (requires sudo)"
-    elif command -v nix-env &>/dev/null; then
-      BB_CMD="nix-env -i babashka"
-      BB_LABEL="nix"
-    fi
-  fi
-
-  # Fallback: babashka's own installer to ~/.local/bin (no sudo)
-  if [ -z "$BB_CMD" ]; then
-    BB_CMD="bash <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install) --dir $BIN_DIR"
-    BB_LABEL="babashka installer (to $BIN_DIR)"
+  if [ "$OS" = "Darwin" ] && command -v brew &>/dev/null; then
+    # macOS with Homebrew: let brew manage it (stays updated with the rest).
+    BB_CMD="brew install borkdude/brew/babashka"
+    BB_LABEL="brew"
+  else
+    # Everything else — Linux, or macOS without brew: babashka's official
+    # installer into ~/.local/bin. No sudo, no system-wide writes, works as root.
+    BB_INSTALLER="$(mktemp)"
+    BB_CMD="curl -sL https://raw.githubusercontent.com/babashka/babashka/master/install -o \"$BB_INSTALLER\" && chmod +x \"$BB_INSTALLER\" && \"$BB_INSTALLER\" --dir \"$BIN_DIR\" && rm -f \"$BB_INSTALLER\""
+    BB_LABEL="babashka installer (→ $BIN_DIR, no sudo)"
   fi
 
   echo ""
@@ -162,12 +162,15 @@ if ! command -v bb &>/dev/null; then
   fi
 
   if [[ "$REPLY" =~ ^[Yy] ]]; then
-    eval "$BB_CMD"
+    if eval "$BB_CMD"; then
+      hash -r 2>/dev/null || true   # forget stale PATH lookups
+    fi
     if command -v bb &>/dev/null; then
       info "babashka installed: $(bb --version)"
     else
-      warn "babashka install may have succeeded but bb is not on PATH yet."
-      echo "  Try opening a new terminal, then run: spai setup"
+      warn "babashka install finished but bb is not on PATH yet."
+      echo "  Add this to your shell profile, then run 'spai setup':"
+      echo "    export PATH=\"$BIN_DIR:\$PATH\""
     fi
   else
     warn "Skipping babashka install."
