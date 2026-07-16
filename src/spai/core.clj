@@ -137,52 +137,51 @@
   [lang patterns]
   (swap! lang-patterns assoc lang patterns))
 
+(def skip-dirs
+  "Directories to skip when walking a project. Universal across projects."
+  #{"node_modules" "target" ".git" "__pycache__" ".next" "dist" "build"
+    ".svn" "vendor" ".gradle" ".idea" ".vscode" "coverage" ".mypy_cache"
+    ".pytest_cache" "venv" ".venv" "env" ".tox" ".eggs"})
+
+(def ext->lang
+  "File extension (without dot) → language keyword."
+  {"rs"    :rust
+   "ts"    :typescript, "tsx" :typescript
+   "clj"   :clojure,    "cljs" :clojure, "cljc" :clojure, "bb" :clojure
+   "py"    :python
+   "go"    :go
+   "php"   :php
+   "java"  :java
+   "swift" :swift
+   "scala" :scala,      "sc" :scala
+   "rb"    :ruby
+   "kt"    :kotlin,     "kts" :kotlin})
+
+(defn- file-ext
+  "Lowercased extension (no dot) of a filename, or nil."
+  [name]
+  (when-let [i (str/last-index-of name ".")]
+    (str/lower-case (subs name (inc i)))))
+
 (defn detect-lang
-  "Detect primary language from file extensions in path."
+  "Detect primary language in path by counting source files per language and
+  taking the most common. Skips vendored/build/VCS noise (see skip-dirs) so a
+  TypeScript project isn't misread from stray files in node_modules or .git.
+  Returns :unknown when no known source files are found."
   [path]
   (let [f (io/file path)]
     (if (.isFile f)
-      (let [name (.getName f)]
-        (cond
-          (str/ends-with? name ".rs")                          :rust
-          (or (str/ends-with? name ".ts")
-              (str/ends-with? name ".tsx"))                     :typescript
-          (or (str/ends-with? name ".clj")
-              (str/ends-with? name ".cljs")
-              (str/ends-with? name ".bb"))                      :clojure
-          (str/ends-with? name ".py")                           :python
-          (str/ends-with? name ".go")                           :go
-          (str/ends-with? name ".php")                          :php
-          (str/ends-with? name ".java")                         :java
-          (str/ends-with? name ".swift")                        :swift
-          (or (str/ends-with? name ".scala")
-              (str/ends-with? name ".sc"))                      :scala
-          (str/ends-with? name ".rb")                           :ruby
-          (or (str/ends-with? name ".kt")
-              (str/ends-with? name ".kts"))                     :kotlin
-          :else                                                 :unknown))
-      ;; Directory - sample first 100 files
-      (let [files (->> (file-seq f)
-                       (filter #(.isFile %))
-                       (take 100)
-                       (map #(.getName %)))]
-        (cond
-          (some #(str/ends-with? % ".rs") files)                :rust
-          (some #(or (str/ends-with? % ".ts")
-                     (str/ends-with? % ".tsx")) files)          :typescript
-          (some #(or (str/ends-with? % ".clj")
-                     (str/ends-with? % ".cljs")) files)         :clojure
-          (some #(str/ends-with? % ".py") files)                :python
-          (some #(str/ends-with? % ".go") files)                :go
-          (some #(str/ends-with? % ".php") files)              :php
-          (some #(str/ends-with? % ".java") files)             :java
-          (some #(str/ends-with? % ".swift") files)            :swift
-          (some #(or (str/ends-with? % ".scala")
-                     (str/ends-with? % ".sc")) files)          :scala
-          (some #(str/ends-with? % ".rb") files)               :ruby
-          (some #(or (str/ends-with? % ".kt")
-                     (str/ends-with? % ".kts")) files)         :kotlin
-          :else                                                 :unknown)))))
+      (get ext->lang (file-ext (.getName f)) :unknown)
+      ;; Directory: count code files by language, skipping noise dirs, then
+      ;; pick the language with the most files.
+      (let [counts (->> (file-seq f)
+                        (filter #(.isFile %))
+                        (remove #(some skip-dirs (str/split (.getPath %) #"/")))
+                        (keep #(get ext->lang (file-ext (.getName %))))
+                        frequencies)]
+        (if (seq counts)
+          (key (apply max-key val counts))
+          :unknown)))))
 
 (def ^:private core-clj-path
   "Absolute path to this file, for use in warnings."
@@ -250,12 +249,6 @@
   (if (str/starts-with? file path)
     (subs file (count path))
     file))
-
-(def skip-dirs
-  "Directories to skip in layout/overview. Universal across projects."
-  #{"node_modules" "target" ".git" "__pycache__" ".next" "dist" "build"
-    ".svn" "vendor" ".gradle" ".idea" ".vscode" "coverage" ".mypy_cache"
-    ".pytest_cache" "venv" ".venv" "env" ".tox" ".eggs"})
 
 (def source-exts
   "Source file extensions we care about."
