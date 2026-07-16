@@ -40,8 +40,6 @@
 
 ;; --- Dependencies ---
 
-(defn sudo-available? [] (= 0 (:exit (sh "which" "sudo"))))
-
 (defn try-install
   "Run an optional-dep install command, tolerating a missing binary.
   Returns true on success. Never throws — a failed optional install must
@@ -56,6 +54,47 @@
           (when (seq (:err r)) (println (:err r)))
           false))))
 
+;; ripgrep ships static release binaries, so we can install it user-locally
+;; into ~/.local/bin — no sudo, no package manager. Same pattern as babashka.
+(def ripgrep-version "15.2.0")
+
+(defn ripgrep-target
+  "ripgrep release target triple for this platform, or nil if unknown.
+  Prefers the static musl build on Linux (no glibc dependency)."
+  [os arch]
+  (let [mac? (str/includes? os "mac")
+        lin? (str/includes? os "linux")
+        arm? (or (str/includes? arch "aarch64") (str/includes? arch "arm64"))
+        x64? (or (str/includes? arch "amd64") (str/includes? arch "x86_64"))]
+    (cond
+      (and mac? arm?) "aarch64-apple-darwin"
+      (and mac? x64?) "x86_64-apple-darwin"
+      (and lin? arm?) "aarch64-unknown-linux-musl"
+      (and lin? x64?) "x86_64-unknown-linux-musl"
+      :else nil)))
+
+(defn install-ripgrep-binary
+  "Download the ripgrep static binary into bin-dir. No sudo, no package
+  manager. Returns true on success, never throws."
+  [target]
+  (let [asset (str "ripgrep-" ripgrep-version "-" target)
+        url   (str "https://github.com/BurntSushi/ripgrep/releases/download/"
+                   ripgrep-version "/" asset ".tar.gz")
+        tmp   (str (System/getProperty "java.io.tmpdir") "/spai-rg-" ripgrep-version)]
+    (info (str "Downloading ripgrep " ripgrep-version " (" target ", no sudo)..."))
+    (let [r (try
+              (sh "bash" "-c"
+                  (str "set -e; rm -rf '" tmp "'; mkdir -p '" tmp "' '" bin-dir "'; "
+                       "curl -sSfL '" url "' | tar xz -C '" tmp "' --strip-components=1; "
+                       "cp '" tmp "/rg' '" bin-dir "/rg'; chmod +x '" bin-dir "/rg'; "
+                       "rm -rf '" tmp "'"))
+              (catch Exception e {:exit 1 :err (.getMessage e)}))]
+      (if (zero? (:exit r))
+        (do (info (str "ripgrep installed → " bin-dir "/rg")) true)
+        (do (warn "ripgrep download failed — falling back to grep.")
+            (when (seq (:err r)) (println (:err r)))
+            false)))))
+
 (defn check-deps []
   (println)
   (let [bb-ok  (= 0 (:exit (sh "which" "bb")))
@@ -69,26 +108,27 @@
           (println)))
     (if rg-ok
       (info (str "ripgrep " (first (str/split-lines (:out (sh "rg" "--version"))))))
-      (let [os   (str/lower-case (System/getProperty "os.name"))
-            mac? (str/includes? os "mac")
-            win? (str/includes? os "windows")
-            brew? (= 0 (:exit (sh "which" "brew")))
-            apt?  (= 0 (:exit (sh "which" "apt-get")))
-            dnf?  (= 0 (:exit (sh "which" "dnf")))
-            opkg? (= 0 (:exit (sh "which" "opkg")))
-            sudo? (sudo-available?)
-            install-cmd (cond
-                          (and mac? brew?)  ["brew" "install" "ripgrep"]
-                          (and apt? sudo?)  ["sudo" "apt-get" "install" "-y" "ripgrep"]
-                          (and dnf? sudo?)  ["sudo" "dnf" "install" "-y" "ripgrep"]
-                          opkg?             ["opkg" "install" "ripgrep"]
-                          :else             nil)]
+      (let [os     (str/lower-case (System/getProperty "os.name"))
+            arch   (str/lower-case (System/getProperty "os.arch"))
+            mac?   (str/includes? os "mac")
+            win?   (str/includes? os "windows")
+            brew?  (= 0 (:exit (sh "which" "brew")))
+            target (ripgrep-target os arch)]
         (warn "ripgrep (rg) not found — spai will use grep (slower)")
-        ;; Optional dep: only offer to install interactively. In a piped
-        ;; curl|bash run we just print the manual hint and move on.
-        (if (and install-cmd interactive?
-                 (ask (str "Install now? (" (str/join " " install-cmd) ")") :y))
-          (try-install install-cmd "ripgrep")
+        ;; Optional dep, installed sudo-free. Prefer brew on macOS (keeps it
+        ;; updated); otherwise pull the static release binary into ~/.local/bin
+        ;; — no sudo, no apt. Only offered interactively; a piped curl|bash run
+        ;; just prints the hint.
+        (cond
+          (and mac? brew? interactive?
+               (ask "Install ripgrep via brew?" :y))
+          (try-install ["brew" "install" "ripgrep"] "ripgrep")
+
+          (and target interactive?
+               (ask (str "Install ripgrep " ripgrep-version " into " bin-dir "? (no sudo)") :y))
+          (install-ripgrep-binary target)
+
+          :else
           (do (println (if win?
                          "  Install: winget install BurntSushi.ripgrep.MSVC"
                          "  Install: https://github.com/BurntSushi/ripgrep#installation"))
