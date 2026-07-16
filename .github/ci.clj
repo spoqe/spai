@@ -146,7 +146,16 @@
              {:name "Install ripgrep"
               :run "sudo apt-get install -y ripgrep"}
              {:name "Install + verify"
-              :run "bb .github/ci.clj install"}]}}})
+              :run "bb .github/ci.clj install"}]}
+    ;; Bare-metal install: no babashka preinstalled, running as root with no
+    ;; sudo — the real curl|bash starting point. Exercises install.sh's own
+    ;; bb auto-install + PATH handling in clean Docker containers. This is the
+    ;; regression guard for the Linux break (sudo-dependent bb install).
+    :install-bare
+    {:runs-on "ubuntu-latest"
+     :steps [{:uses "actions/checkout@v4"}
+             {:name "Bare-metal install test (Docker)"
+              :run "./test/test-install.sh ci"}]}}})
 
 ;; ─── YAML emitter ──────────────────────────────────────────────────
 

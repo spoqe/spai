@@ -43,3 +43,9 @@ jobs:
       run: sudo apt-get install -y ripgrep
     - name: Install + verify
       run: bb .github/ci.clj install
+  install-bare:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Bare-metal install test (Docker)
+      run: ./test/test-install.sh ci
