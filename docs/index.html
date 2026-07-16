@@ -147,6 +147,39 @@
   }
   .hero-meta span { margin-right: 1.5rem; }
 
+  /* ── Install alternative (curl|bash reassurance) ── */
+  .install-alt { margin-top: 1rem; font-size: 0.85rem; }
+  .install-alt summary {
+    color: var(--muted);
+    cursor: pointer;
+    list-style: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    transition: color 0.2s;
+  }
+  .install-alt summary::-webkit-details-marker { display: none; }
+  .install-alt summary::before {
+    content: "\25B8";
+    color: var(--accent);
+    transition: transform 0.2s;
+  }
+  .install-alt[open] summary::before { transform: rotate(90deg); }
+  .install-alt summary:hover { color: var(--text); }
+  .install-alt summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .install-alt .alt-body {
+    margin-top: 1rem;
+    padding-left: 1.1rem;
+    border-left: 2px solid var(--border);
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 560px;
+  }
+  .install-alt .alt-body a { color: var(--accent); text-decoration: none; }
+  .install-alt .alt-body a:hover { text-decoration: underline; }
+  .install-alt .alt-body .install-block { margin-top: 0.9rem; }
+  .install-alt .alt-body code strong { color: var(--accent); font-weight: 500; }
+
   /* ── Sections ── */
   section {
     padding: 4rem 0;
@@ -383,6 +416,19 @@
       <code>curl -fsSL https://raw.githubusercontent.com/spoqe/spai/main/install.sh | bash</code>
       <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -fsSL https://raw.githubusercontent.com/spoqe/spai/main/install.sh | bash').then(()=>{this.textContent='copied';setTimeout(()=>this.textContent='copy',1500)})">copy</button>
     </div>
+
+    <details class="install-alt">
+      <summary>Piping a script into <code>bash</code> makes you nervous? Good &mdash; us too.</summary>
+      <div class="alt-body">
+        <p>You should never run a shell script you haven't read, least of all one that touches your <code>PATH</code>. So read ours: <a href="https://github.com/spoqe/spai/blob/main/install.sh">install.sh</a> is ~190 lines of plain bash &mdash; <strong style="color:var(--text);font-weight:500;">no telemetry, no sudo, no system-wide writes.</strong> It downloads spai, installs <a href="https://babashka.org">babashka</a> into <code>~/.local/bin</code>, and adds it to your <code>PATH</code>. That's it.</p>
+        <p style="margin-top:0.9rem;">Prefer to clone first and run it yourself? Same result, on your terms:</p>
+        <div class="install-block">
+          <span class="prompt">$</span>
+          <code>git clone https://github.com/spoqe/spai.git &amp;&amp; cd spai &amp;&amp; ./install.sh</code>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('git clone https://github.com/spoqe/spai.git && cd spai && ./install.sh').then(()=>{this.textContent='copied';setTimeout(()=>this.textContent='copy',1500)})">copy</button>
+        </div>
+      </div>
+    </details>
 
     <p class="hero-meta">
       <span>35 tools</span>

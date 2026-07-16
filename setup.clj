@@ -40,6 +40,22 @@
 
 ;; --- Dependencies ---
 
+(defn sudo-available? [] (= 0 (:exit (sh "which" "sudo"))))
+
+(defn try-install
+  "Run an optional-dep install command, tolerating a missing binary.
+  Returns true on success. Never throws — a failed optional install must
+  not abort setup."
+  [install-cmd label]
+  (info (str "Installing " label "..."))
+  (let [r (try (apply sh install-cmd)
+               (catch Exception e {:exit 1 :err (.getMessage e)}))]
+    (if (zero? (:exit r))
+      (do (info (str label " installed.")) true)
+      (do (warn (str "Install failed — run manually: " (str/join " " install-cmd)))
+          (when (seq (:err r)) (println (:err r)))
+          false))))
+
 (defn check-deps []
   (println)
   (let [bb-ok  (= 0 (:exit (sh "which" "bb")))
@@ -60,25 +76,19 @@
             apt?  (= 0 (:exit (sh "which" "apt-get")))
             dnf?  (= 0 (:exit (sh "which" "dnf")))
             opkg? (= 0 (:exit (sh "which" "opkg")))
+            sudo? (sudo-available?)
             install-cmd (cond
-                          (and mac? brew?) ["brew" "install" "ripgrep"]
-                          apt?             ["sudo" "apt-get" "install" "-y" "ripgrep"]
-                          dnf?             ["sudo" "dnf" "install" "-y" "ripgrep"]
-                          opkg?            ["opkg" "install" "ripgrep"]
-                          win?             nil
-                          :else            nil)]
+                          (and mac? brew?)  ["brew" "install" "ripgrep"]
+                          (and apt? sudo?)  ["sudo" "apt-get" "install" "-y" "ripgrep"]
+                          (and dnf? sudo?)  ["sudo" "dnf" "install" "-y" "ripgrep"]
+                          opkg?             ["opkg" "install" "ripgrep"]
+                          :else             nil)]
         (warn "ripgrep (rg) not found — spai will use grep (slower)")
-        (if install-cmd
-          (do (print (str "  Install now? (" (str/join " " install-cmd) ") [Y/n] "))
-              (flush)
-              (let [ans (str/trim (or (read-line) ""))]
-                (when (or (= "" ans) (= "y" (str/lower-case ans)))
-                  (info "Installing ripgrep...")
-                  (let [r (apply sh install-cmd)]
-                    (if (zero? (:exit r))
-                      (info "ripgrep installed.")
-                      (do (warn (str "Install failed — run manually: " (str/join " " install-cmd)))
-                          (println (:err r))))))))
+        ;; Optional dep: only offer to install interactively. In a piped
+        ;; curl|bash run we just print the manual hint and move on.
+        (if (and install-cmd interactive?
+                 (ask (str "Install now? (" (str/join " " install-cmd) ")") :y))
+          (try-install install-cmd "ripgrep")
           (do (println (if win?
                          "  Install: winget install BurntSushi.ripgrep.MSVC"
                          "  Install: https://github.com/BurntSushi/ripgrep#installation"))
@@ -102,17 +112,9 @@
                           (and mac? brew?) ["brew" "install" "ollama"]
                           :else            nil)]
         (warn "ollama not found — spai search will not be available [optional]")
-        (if install-cmd
-          (do (print (str "  Install now? (" (str/join " " install-cmd) ") [Y/n] "))
-              (flush)
-              (let [ans (str/trim (or (read-line) ""))]
-                (when (or (= "" ans) (= "y" (str/lower-case ans)))
-                  (info "Installing ollama...")
-                  (let [r (apply sh install-cmd)]
-                    (if (zero? (:exit r))
-                      (info "ollama installed.")
-                      (do (warn (str "Install failed — run manually: " (str/join " " install-cmd)))
-                          (println (:err r))))))))
+        (if (and install-cmd interactive?
+                 (ask (str "Install now? (" (str/join " " install-cmd) ")") :y))
+          (try-install install-cmd "ollama")
           (do (println "  Install: https://ollama.ai/download")
               (println)))))
     {:bb bb-ok :rg rg-ok :ollama ollama-ok}))
