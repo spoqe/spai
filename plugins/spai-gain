@@ -1,0 +1,240 @@
+#!/usr/bin/env bb
+{:doap/name        "gain"
+ :doap/description "Token savings from using spai instead of grep-chains. RTK-compatible JSON."
+ :doap/created     "2026-04-17"
+ :dc/creator       "SPOQE"
+ :spai/args        "[--format json|text] [-p|--project] [--by-command]"
+ :spai/tags        #{:analytics :savings :rtk}}
+
+;; spai-gain — report "operations-avoided" savings.
+;;
+;; Complements RTK. RTK compresses the output of commands that ran (byte-level).
+;; spai skips commands entirely by collapsing grep-chains into one structured call
+;; (operation-level). This plugin estimates the tokens *not spent* because the
+;; agent reached for spai instead of chaining greps.
+;;
+;; Output matches RTK's `gain --format json` shape so downstream dashboards
+;; can aggregate both. Unit is tokens, labelled in a "unit" field.
+
+(require '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[cheshire.core :as json])
+
+;; --- Cost table: estimated grep-equivalent input + typical spai output, tokens ---
+;; Grounded in the command descriptions in the README — refine empirically.
+(def cost-table
+  {"shape"        {:input 10000 :output 1200}
+   "sig"          {:input  3000 :output  800}
+   "overview"     {:input  2000 :output  400}
+   "layout"       {:input  3000 :output  600}
+   "patterns"     {:input  3000 :output  800}
+   "usages"       {:input  3500 :output  700}
+   "def"          {:input  2000 :output  400}
+   "context"      {:input  5500 :output 1000}
+   "blast"        {:input 40000 :output 1800}
+   "deps"         {:input  6000 :output  900}
+   "tests"        {:input  2500 :output  500}
+   "hotspots"     {:input  5500 :output  900}
+   "todos"        {:input  1500 :output  600}
+   "antipatterns" {:input  2500 :output  700}
+   "changes"      {:input  2000 :output  500}
+   "related"      {:input  8500 :output  800}
+   "diff"         {:input  3000 :output 1000}
+   "diff-shape"   {:input  6500 :output  900}
+   "narrative"    {:input 10000 :output 1200}
+   "drift"        {:input 15000 :output 1000}
+   "who"          {:input  5500 :output  700}
+   "recon"        {:input 30000 :output 2500}
+   "memory"       {:input  2000 :output  600}
+   "reflect"      {:input   500 :output  800}
+   "stats"        {:input   500 :output  500}
+   "plugins"      {:input   500 :output  400}
+   "search"       {:input   200 :output  300}
+   "help"         {:input   100 :output 1200}})
+
+(def default-cost {:input 2000 :output 700})
+
+(def log-file
+  (let [xdg (or (System/getenv "XDG_DATA_HOME")
+                (str (System/getProperty "user.home") "/.local/share"))]
+    (str xdg "/spai/usage.log")))
+
+(defn parse-argv [argv]
+  ;; Normalise three-dash typos like '---format' → '--format'
+  (loop [xs (mapv #(str/replace % #"^-{3,}" "--") (vec argv))
+         out {:format "text" :by-command true}]
+    (if (empty? xs)
+      out
+      (let [a (first xs), rst (subvec xs 1)]
+        (cond
+          (or (= a "-h") (= a "--help"))
+          (do (println "Usage: spai gain [--format json|text] [-p|--project] [--no-by-command]")
+              (println "Estimates tokens saved by using spai over grep-chain equivalents.")
+              (println "Complements RTK: RTK saves on output you ran, spai saves on calls you didn't make.")
+              (System/exit 0))
+          (or (= a "-p") (= a "--project"))
+          (recur rst (assoc out :project (System/getProperty "user.dir")))
+          (= a "--no-by-command") (recur rst (assoc out :by-command false))
+          (= a "--by-command") (recur rst (assoc out :by-command true))
+          (or (= a "-f") (= a "--format"))
+          (recur (vec (rest rst)) (assoc out :format (first rst)))
+          :else (recur rst out))))))
+
+(defn read-log []
+  (when (.exists (io/file log-file))
+    (->> (str/split-lines (slurp log-file))
+         (keep (fn [line]
+                 (when (seq line)
+                   (try (edn/read-string line) (catch Exception _ nil))))))))
+
+(defn in-project? [entry project-root]
+  (let [args (:args entry)
+        paths (filter string? args)]
+    (some #(and % (str/starts-with? % project-root)) paths)))
+
+(defn cost-for [cmd]
+  (get cost-table cmd default-cost))
+
+(defn summarize [entries]
+  (let [costs (map #(cost-for (:command %)) entries)
+        total-in  (reduce + 0 (map :input costs))
+        total-out (reduce + 0 (map :output costs))
+        saved     (- total-in total-out)
+        pct       (if (pos? total-in)
+                    (* 100.0 (/ saved total-in))
+                    0.0)]
+    {:total_commands   (count entries)
+     :total_input      total-in
+     :total_output     total-out
+     :total_saved      saved
+     :avg_savings_pct  (-> pct (* 100) Math/round (/ 100.0))
+     :unit             "tokens"
+     :category         "operations-avoided"
+     :source           "spai"}))
+
+(defn summarize-by-command [entries]
+  (->> entries
+       (group-by :command)
+       (map (fn [[cmd es]]
+              (let [summ (summarize es)
+                    avg-pct (if (pos? (:total_input summ))
+                              (double (* 100 (/ (:total_saved summ) (:total_input summ))))
+                              0.0)]
+                [cmd (-> summ
+                         (select-keys [:total_commands :total_input :total_output :total_saved])
+                         (assoc :avg_pct avg-pct))])))
+       (sort-by (fn [[_ m]] (- (:total_saved m))))
+       vec))
+
+;; ---------- Pretty text (RTK-style) ----------
+
+(def ^:private tty? (boolean (System/console)))
+(defn- c [code s] (if tty? (str "\033[" code "m" s "\033[0m") s))
+(def  ^:private bold  (partial c "1"))
+(def  ^:private dim   (partial c "2"))
+(def  ^:private red   (partial c "31"))
+(def  ^:private green (partial c "32"))
+(def  ^:private yellow (partial c "33"))
+(def  ^:private blue  (partial c "34"))
+(def  ^:private cyan  (partial c "36"))
+(def  ^:private gray  (partial c "90"))
+
+(defn- fmt-num
+  "Abbreviate: 1_234_567 → '1.2M', 12_345 → '12.3K', 987 → '987'."
+  [n]
+  (let [n (long n)]
+    (cond
+      (>= (Math/abs n) 1000000) (format "%.1fM" (/ n 1e6))
+      (>= (Math/abs n) 1000)    (format "%.1fK" (/ n 1e3))
+      :else (str n))))
+
+(defn- pct-colour [pct]
+  (cond
+    (< pct 50)  red
+    (< pct 80)  yellow
+    :else       green))
+
+(defn- bar
+  "Build an impact bar: 'filled' chars of `on`, rest of `off`, width `w`."
+  [ratio w]
+  (let [filled (int (Math/round (* ratio w)))
+        empty  (- w filled)]
+    (str (cyan (apply str (repeat filled "█")))
+         (gray (apply str (repeat empty "░"))))))
+
+(defn- rule [w] (gray (apply str (repeat w "─"))))
+
+(defn print-text [s by-cmd scope]
+  (let [scope-label (if scope (str "Project: " scope) "Global Scope")]
+    (println)
+    (println (str " " (bold (green "spai gain")) " — "
+                  (dim "operations-avoided") "   "
+                  (gray (str "(" scope-label ")"))))
+    (println (gray "════════════════════════════════════════════════════════════"))
+    (println)
+    ;; Summary block (RTK-style labels, right-aligned values)
+    (println (str "  Commands run     " (bold (format "%d" (:total_commands s)))))
+    (println (str "  Equivalent in    " (bold (fmt-num (:total_input s)))  (dim " tokens")))
+    (println (str "  spai output      " (bold (fmt-num (:total_output s))) (dim " tokens")))
+    (let [saved-s (fmt-num (:total_saved s))
+          pct     (:avg_savings_pct s)
+          pct-s   ((pct-colour pct) (format "%.1f%%" pct))]
+      (println (str "  Saved            " (bold (green saved-s)) (dim " tokens") "  " pct-s)))
+    ;; Efficiency meter
+    (let [pct (:avg_savings_pct s)
+          w   24
+          ratio (/ pct 100.0)
+          filled (int (Math/round (* ratio w)))
+          empty  (- w filled)
+          meter  (str (green (apply str (repeat filled "█")))
+                      (gray (apply str (repeat empty "░"))))]
+      (println (str "  Efficiency       " meter "  " ((pct-colour pct) (format "%.1f%%" pct)))))
+    (println))
+  (when (seq by-cmd)
+    (println (str " " (bold (green "By Command"))))
+    (println (rule 71))
+    (println (str "   # " (bold "Command")
+                  (apply str (repeat (- 16 (count "Command")) " "))
+                  (bold "  Count") "   " (bold "Saved") "   " (bold "Avg%") "    " (bold "Impact")))
+    (println (rule 71))
+    (let [max-saved (apply max 1 (map #(-> % second :total_saved) by-cmd))]
+      (doseq [[idx [cmd m]] (map-indexed vector (take 12 by-cmd))]
+        (let [ratio (/ (:total_saved m) (double max-saved))
+              pct-fn (pct-colour (:avg_pct m))
+              cmd-disp (if (> (count cmd) 14) (str (subs cmd 0 13) "…") cmd)]
+          (println (format " %2d.  %s%s %5d   %6s   %s   %s"
+                           (inc idx)
+                           (cyan (format "%-14s" cmd-disp))
+                           ""
+                           (:total_commands m)
+                           (fmt-num (:total_saved m))
+                           (pct-fn (format "%5.1f%%" (:avg_pct m)))
+                           (bar ratio 10))))))
+    (println (rule 71))
+    (println))
+  (println (dim "  Estimates, not exact. RTK reformats a fixed set of commands."))
+  (println (dim "  spai does three things RTK can't:"))
+  (println (dim "    • absorbs grep-chains into one structured call (saves context)"))
+  (println (dim "    • surfaces repeated sequences across sessions (spai reflect)"))
+  (println (dim "    • your agent writes the consolidating plugin — 30s, no PR anywhere"))
+  (println))
+
+(defn -main [& argv]
+  (let [opts (parse-argv argv)
+        all  (read-log)
+        entries (if (:project opts)
+                  (filter #(in-project? % (:project opts)) all)
+                  all)
+        summary (summarize entries)
+        by-cmd  (when (:by-command opts) (summarize-by-command entries))]
+    (case (:format opts)
+      "json" (println (json/generate-string
+                       (cond-> {:summary summary}
+                         by-cmd (assoc :by_command (into {} by-cmd)))
+                       {:pretty true}))
+      "text" (print-text summary by-cmd (:project opts))
+      (do (println "Unknown format:" (:format opts))
+          (System/exit 1)))))
+
+(apply -main *command-line-args*)
