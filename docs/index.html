@@ -180,6 +180,35 @@
   .install-alt .alt-body .install-block { margin-top: 0.9rem; }
   .install-alt .alt-body code strong { color: var(--accent); font-weight: 500; }
 
+  /* ── Hero kicker (SPOQE tie-in) ── */
+  .hero-kicker {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--faint);
+    margin-bottom: 1.25rem;
+  }
+  .hero-kicker a { color: var(--accent); text-decoration: none; }
+  .hero-kicker a:hover { text-decoration: underline; }
+
+  /* ── Feature glance ── */
+  .glance-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem 2.5rem;
+  }
+  .glance-item { display: flex; gap: 0.85rem; align-items: baseline; }
+  .glance-item code {
+    color: var(--accent);
+    white-space: nowrap;
+    font-size: 0.82rem;
+    flex-shrink: 0;
+    min-width: 7.5rem;
+  }
+  .glance-item span { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+  @media (max-width: 768px) { .glance-grid { grid-template-columns: 1fr; } }
+
   /* ── Sections ── */
   section {
     padding: 4rem 0;
@@ -376,6 +405,7 @@
 
   <!-- ── Hero: CTA above the fold ── -->
   <div class="hero">
+    <p class="hero-kicker">The first tool from <a href="#spoqe">SPOQE</a></p>
     <p class="hero-pain">Your AI agent just burned 180,000 tokens reading code it read yesterday, and it's about to do the same thing again next session.</p>
 
     <div style="margin-bottom: 1.5rem;">
@@ -436,6 +466,64 @@
       <span>EPL licence</span>
     </p>
   </div>
+
+  <!-- ── Feature glance: quick scan right after the CTA ── -->
+  <section>
+    <p class="section-label">At a glance</p>
+    <h2 class="section-title">What your agent gets &mdash; <span class="green">in one call.</span></h2>
+    <p class="section-desc">Structured answers, not grep output. Each of these lands in ~200&ndash;500 tokens instead of a five-command chain your agent has to read and re-read.</p>
+    <div class="glance-grid">
+      <div class="glance-item"><code>spai blast</code><span>Blast radius of a symbol &mdash; definition, callers, tests, risk.</span></div>
+      <div class="glance-item"><code>spai usages</code><span>Every reference to a symbol, structured &mdash; not grep noise.</span></div>
+      <div class="glance-item"><code>spai shape</code><span>Module map &mdash; files, functions, public surface of a dir.</span></div>
+      <div class="glance-item"><code>spai who</code><span>Dependency graph &mdash; what breaks if you change this.</span></div>
+      <div class="glance-item"><code>spai related</code><span>Hidden coupling, surfaced from git co-change history.</span></div>
+      <div class="glance-item"><code>spai hotspots</code><span>Largest, churn-heavy files at a glance.</span></div>
+    </div>
+    <p style="color: var(--faint); font-size: 0.85rem; margin-top: 1.75rem;">35 tools in total &mdash; <code>spai help</code> lists them, and your agent loads only what it needs.</p>
+  </section>
+
+  <!-- ── The token maths ── -->
+  <section>
+    <p class="section-label">The token maths</p>
+    <h2 class="section-title">MCP costs you <span style="color:var(--danger)">42k tokens</span> before your agent thinks a single thought.</h2>
+    <p class="section-desc"><strong style="color: var(--accent);">spai</strong> loads 1.2k. The other 40,800 go back to thinking.</p>
+
+    <div class="mcp-grid">
+      <div class="mcp-card">
+        <p class="card-label">MCP (standard)</p>
+        <p class="big-number bad">~42k</p>
+        <p class="big-label">tokens at session start</p>
+      </div>
+      <div class="mcp-card">
+        <p class="card-label">spai CLI</p>
+        <p class="big-number good">~1.2k</p>
+        <p class="big-label">tokens, on demand</p>
+      </div>
+    </div>
+
+    <p style="color: var(--muted); font-size: 0.88rem; margin-top: 1.5rem;">spai ships both modes. MCP if your framework expects it. CLI if you'd rather keep your context window for actual work.</p>
+  </section>
+
+  <!-- ── In your editor ── -->
+  <section>
+    <p class="section-label">In your editor</p>
+    <h2 class="section-title">Same tools. <span class="green">Where you already are.</span></h2>
+    <p class="section-desc" style="max-width: 600px;">Every session, your agent wakes up in a repo it's never seen. <code>spai shape</code> gives it the whole module in one read &mdash; files, functions, structure, public surface. Orientation in 200 tokens instead of reading every file. We wanted to see what the agent sees, so we built a VS Code extension. Same tools, rendered inline.</p>
+
+    <div class="img-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+      <div>
+        <img src="hotspot-ss.png" alt="spai hotspots treemap in VS Code — file sizes visualised as a proportional treemap" loading="lazy" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); height: auto;">
+        <p style="color: var(--faint); font-size: 0.75rem; margin-top: 0.5rem;">Hotspots — largest files at a glance</p>
+      </div>
+      <div>
+        <img src="module-shape-ss.png" alt="spai module shape in VS Code — files, functions, and public surface of a module" loading="lazy" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); height: auto;">
+        <p style="color: var(--faint); font-size: 0.75rem; margin-top: 0.5rem;">Module shape — files, functions, structure</p>
+      </div>
+    </div>
+
+    <p style="color: var(--muted); font-size: 0.88rem;"><a href="https://github.com/spoqe/spai-vscode" style="color: var(--accent); text-decoration: none;">VS Code extension on GitHub</a> — or keep using the CLI. Same tools either way.</p>
+  </section>
 
   <!-- ── Origin story → five greps ── -->
   <section>
@@ -527,50 +615,9 @@
     <p style="color: var(--muted); font-size: 0.9rem; margin-top: 1.5rem;"><strong style="color: var(--text);">34 more tools like this.</strong> Each one came from asking the agent: what are you fumbling with?</p>
   </section>
 
-  <!-- ── The token maths ── -->
-  <section>
-    <p class="section-label">The token maths</p>
-    <h2 class="section-title">MCP costs you <span style="color:var(--danger)">42k tokens</span> before your agent thinks a single thought.</h2>
-    <p class="section-desc"><strong style="color: var(--accent);">spai</strong> loads 1.2k. The other 40,800 go back to thinking.</p>
-
-    <div class="mcp-grid">
-      <div class="mcp-card">
-        <p class="card-label">MCP (standard)</p>
-        <p class="big-number bad">~42k</p>
-        <p class="big-label">tokens at session start</p>
-      </div>
-      <div class="mcp-card">
-        <p class="card-label">spai CLI</p>
-        <p class="big-number good">~1.2k</p>
-        <p class="big-label">tokens, on demand</p>
-      </div>
-    </div>
-
-    <p style="color: var(--muted); font-size: 0.88rem; margin-top: 1.5rem;">spai ships both modes. MCP if your framework expects it. CLI if you'd rather keep your context window for actual work.</p>
-  </section>
-
-  <!-- ── In your editor ── -->
-  <section>
-    <p class="section-label">In your editor</p>
-    <h2 class="section-title">Same tools. <span class="green">Where you already are.</span></h2>
-    <p class="section-desc" style="max-width: 600px;">Every session, your agent wakes up in a repo it's never seen. <code>spai shape</code> gives it the whole module in one read &mdash; files, functions, structure, public surface. Orientation in 200 tokens instead of reading every file. We wanted to see what the agent sees, so we built a VS Code extension. Same tools, rendered inline.</p>
-
-    <div class="img-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
-      <div>
-        <img src="hotspot-ss.png" alt="spai hotspots treemap in VS Code — file sizes visualised as a proportional treemap" loading="lazy" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); height: auto;">
-        <p style="color: var(--faint); font-size: 0.75rem; margin-top: 0.5rem;">Hotspots — largest files at a glance</p>
-      </div>
-      <div>
-        <img src="module-shape-ss.png" alt="spai module shape in VS Code — files, functions, and public surface of a module" loading="lazy" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); height: auto;">
-        <p style="color: var(--faint); font-size: 0.75rem; margin-top: 0.5rem;">Module shape — files, functions, structure</p>
-      </div>
-    </div>
-
-    <p style="color: var(--muted); font-size: 0.88rem;"><a href="https://github.com/spoqe/spai-vscode" style="color: var(--accent); text-decoration: none;">VS Code extension on GitHub</a> — or keep using the CLI. Same tools either way.</p>
-  </section>
 
   <!-- ── SPOQE teaser ── -->
-  <section>
+  <section id="spoqe">
     <p class="section-label">What's next</p>
     <h2 class="section-title"><span class="green">spai</span> is the first tool from SPOQE.</h2>
     <p class="section-desc" style="max-width: 600px;">We're building a federated query engine &mdash; one language across SQL, SPARQL, Elasticsearch, GraphQL, and REST APIs. Your data stays where it is (if you want). RDF-aware. No ETL. No data movement. spai's agent memory will be built on it.</p>
