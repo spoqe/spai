@@ -66,7 +66,9 @@ VERIFY='
 '
 
 only="${1:-}"
-want() { [ -z "$only" ] || [ "$only" = "$1" ] || { [ "$only" = "ci" ] && [ "$1" = "local-clone" ]; }; }
+# `ci` selects the hermetic scenarios that test the checked-out code from scratch.
+ci_scenario() { case "$1" in local-clone|ripgrep) return 0;; *) return 1;; esac; }
+want() { [ -z "$only" ] || [ "$only" = "$1" ] || { [ "$only" = "ci" ] && ci_scenario "$1"; }; }
 
 # CI gate — hermetic, tests the checked-out code from scratch (no bb/rsync/sudo).
 if want local-clone; then
@@ -78,6 +80,29 @@ if want local-clone; then
     echo "=== running ./install.sh from clone ==="
     ./install.sh
     '"$VERIFY" \
+    -v "$REPO_DIR:/src:ro"
+fi
+
+# Sudo-free ripgrep install: reproduce install-ripgrep-binary's shell (version
+# read from setup.clj so the test can't drift) in a root container with NO sudo
+# present. If the code ever reached for sudo/apt, this would fail.
+if want ripgrep; then
+  run "ripgrep" '
+    set -e
+    apt-get update -qq >/dev/null 2>&1
+    apt-get install -y -qq curl ca-certificates >/dev/null 2>&1
+    command -v sudo >/dev/null && { echo "FAIL: sudo present, test invalid"; exit 1; }
+    V=$(grep -oE "ripgrep-version \"[0-9.]+\"" /src/setup.clj | grep -oE "[0-9.]+")
+    echo "ripgrep version from setup.clj: $V"
+    case "$(uname -m)" in aarch64|arm64) T=aarch64-unknown-linux-musl;; *) T=x86_64-unknown-linux-musl;; esac
+    BIN=$HOME/.local/bin; TMP=/tmp/spai-rg
+    rm -rf $TMP; mkdir -p $TMP $BIN
+    curl -sSfL "https://github.com/BurntSushi/ripgrep/releases/download/$V/ripgrep-$V-$T.tar.gz" | tar xz -C $TMP --strip-components=1
+    cp $TMP/rg $BIN/rg && chmod +x $BIN/rg && rm -rf $TMP
+    export PATH="$BIN:$PATH"
+    rg --version | head -1
+    echo hello | rg hello >/dev/null && echo "OK: ripgrep installed sudo-free"
+    ' \
     -v "$REPO_DIR:/src:ro"
 fi
 
