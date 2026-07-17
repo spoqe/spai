@@ -291,9 +291,14 @@
 
 (let [[command & args] *command-line-args*]
   (if-let [cmd (get commands (keyword command))]
-    ;; Registry command: log, run, print
-    (do (spai.analytics/log-usage! command args {})
-        (pp/pprint ((:run cmd) args)))
+    ;; Registry command. `spai <cmd> --help` prints that command's help
+    ;; instead of treating "--help" as a positional argument (e.g. a path).
+    (if (contains? #{"--help" "-h" "help"} (first args))
+      (pp/pprint (assoc (help-entry cmd)
+                        :command command
+                        :usage (str "spai " command " " (:args cmd))))
+      (do (spai.analytics/log-usage! command args {})
+          (pp/pprint ((:run cmd) args))))
     ;; Non-registry commands
     (case command
       "plugins"  (do (spai.analytics/log-usage! "plugins" args {})

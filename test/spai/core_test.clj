@@ -1,6 +1,23 @@
 (ns spai.core-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.java.io :as io]
             [spai.core :as core]))
+
+(defn- with-temp-tree
+  "Create a temp dir, populate it via (rel → content) map, run (f dir-path),
+  then delete the tree. Returns f's value."
+  [files f]
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                        "spai-detect"
+                        (into-array java.nio.file.attribute.FileAttribute [])))]
+    (try
+      (doseq [[rel content] files]
+        (let [file (io/file root rel)]
+          (io/make-parents file)
+          (spit file content)))
+      (f (.getPath root))
+      (finally
+        (doseq [x (reverse (file-seq root))] (.delete x))))))
 
 ;; -------------------------------------------------------------------
 ;; detect-lang
@@ -32,6 +49,30 @@
 (deftest detect-lang-directory
   (testing "detects clojure from spai's own source"
     (is (= :clojure (core/detect-lang "src/spai")))))
+
+(deftest detect-lang-skips-noise-dirs
+  ;; Regression: a TypeScript project was reported as :rust because detection
+  ;; sampled the first 100 files of a raw file-seq (node_modules/.git noise),
+  ;; found no known source, and resolve-lang fell back to :rust.
+  (testing "typescript sources win; stray .rs in node_modules/.git is ignored"
+    (with-temp-tree
+      {"src/app.ts"              "export const x = 1;"
+       "src/util.ts"             "export function f() {}"
+       "src/view.tsx"            "export const V = () => null;"
+       "node_modules/pkg/lib.rs" "fn main() {}"
+       ".git/objects/blob.rs"    "fn x() {}"
+       "package.json"            "{}"}
+      (fn [dir] (is (= :typescript (core/detect-lang dir)))))))
+
+(deftest detect-lang-picks-dominant
+  (testing "most common language wins, not first file encountered"
+    (with-temp-tree
+      {"a.py" "" "b.py" "" "c.py" "" "one.go" ""}
+      (fn [dir] (is (= :python (core/detect-lang dir))))))
+  (testing "only-noise directory is :unknown, never a wrong guess"
+    (with-temp-tree
+      {"node_modules/x/y.rs" "fn a(){}" ".git/z.ts" ""}
+      (fn [dir] (is (= :unknown (core/detect-lang dir)))))))
 
 (deftest resolve-lang-test
   (testing "known language passes through"
